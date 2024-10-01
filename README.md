@@ -2,6 +2,7 @@
 # 班级座位随机生成器
 ## 为班级便捷生成座位列表
 tip:程序基于PyQt5开发。随机原理来自于班主任
+## 程序设计操作逻辑为了在电子白板上方便使用
 # 使用说明
 ![图片教程01](https://github.com/PengZhangSDF/ClassSeatRandomGenerator/blob/master/img/1.png)
 ## 程序界面：
