@@ -3,7 +3,6 @@
 ## 为班级便捷生成座位列表
 tip:程序基于PyQt5开发
 # 使用说明
-![图片教程01](/imgs/2024-10-01/RrFOeej1ipBioTse.png)
 ## 程序界面：
 
  - **左侧界面：** 显示序号，姓名，随机数（初始为0.000）
@@ -20,11 +19,7 @@ tip:程序基于PyQt5开发
  - **编辑名字**：进入名字编辑界面
  - **导出到Excel**：将**当前显示**的座位表保存为Excel表格（如果你的座位表只有数字那么只会保存为数字）
  ## 图片教程和程序展示
- ![1](/imgs/2024-10-01/fbicukpbjVnAFZhn.png)
- ![2](/imgs/2024-10-01/Oks5gq70O3jggwgL.png)
- ![3](/imgs/2024-10-01/NJK0XBEQmK65iEB9.png)
- ![4](/imgs/2024-10-01/CX0ED7V0wPg7UQdC.png)
- ![5](/imgs/2024-10-01/LXCgQOcy29wS1UNr.png)
+ 没有：加载不出来
  # 感谢
  ## [PyQt5](https://github.com/PyQt5/PyQt)提供图像界面支持
  ## [openpyxl](https://github.com/python-excel/xlrd)提供Excel表格保存
