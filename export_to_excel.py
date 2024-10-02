@@ -1,5 +1,3 @@
-import pandas as pd
-from PyQt5.QtGui import QPalette
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill
 from datetime import datetime

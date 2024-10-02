@@ -242,7 +242,7 @@ class EditMode(QWidget):
             self.parent().create_color_buttons()  # 重新创建颜色选择按钮
             self.parent().create_action_buttons()  # 重新创建操作按钮
             self.parent().create_seating_grid()  # 重新创建座位表
-            self.parent().restore_seating_arrangement()  # 恢复座位表状态
+            self.parent().restore_seating_arrangement(False)  # 恢复座位表状态
             self.parent().check_seating_balance()
         self.close()
 
@@ -252,7 +252,7 @@ class EditMode(QWidget):
             self.parent().create_color_buttons()  # 重新创建颜色选择按钮
             self.parent().create_action_buttons()  # 重新创建操作按钮
             self.parent().create_seating_grid()  # 重新创建座位表
-            self.parent().restore_seating_arrangement()  # 恢复座位表状态
+            self.parent().restore_seating_arrangement(True)  # 恢复座位表状态
             self.parent().check_seating_balance()
         self.close()
 

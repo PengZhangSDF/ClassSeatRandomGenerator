@@ -101,7 +101,6 @@ class SeatingArrangement(QWidget):
         main_layout.addLayout(self.action_buttons_layout)
 
         self.warning_label = QLabel("")
-        self.warning_label.setStyleSheet("background-color: white;")
         self.warning_label.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(self.warning_label)
 
@@ -109,7 +108,37 @@ class SeatingArrangement(QWidget):
 
         self.load_names()
         self.load_seating_arrangement()
+    def enter_fullscreen_mode(self):
+        self.fullscreen_window = QWidget()
+        self.fullscreen_window.setWindowTitle("全屏展示座位表")
+        self.fullscreen_window.setGeometry(0, 0, 1920, 1080)  # Set to fullscreen size
+        layout = QVBoxLayout()
 
+        # Create a scaled seating grid
+        scaled_grid = QGridLayout()
+        for row in range(12):
+            for col in range(12):
+                seat = self.seats[row][col]
+                scaled_seat = QPushButton(seat.text())
+                scaled_seat.setFixedSize(120, 60)  # Scale size by 1.5
+                scaled_seat.setStyleSheet(seat.styleSheet())  # Keep the same style
+                scaled_seat.setFont(QFont('Arial', 21))  # Scale font size by 1.5
+                scaled_grid.addWidget(scaled_seat, row, col)
+
+        layout.addLayout(scaled_grid)
+
+        # Exit fullscreen button
+        exit_button = QPushButton("退出全屏展示")
+        exit_button.setFixedHeight(100)
+        exit_button.setFont(QFont('Arial', 24))
+        exit_button.clicked.connect(self.exit_fullscreen_mode)
+        layout.addWidget(exit_button)
+
+        self.fullscreen_window.setLayout(layout)
+        self.fullscreen_window.show()
+
+    def exit_fullscreen_mode(self):
+        self.fullscreen_window.close()
     def check_first_run(self):
         if not os.path.exists("hello_world.txt"):
             with open("hello_world.txt", "w") as f:
@@ -151,24 +180,38 @@ class SeatingArrangement(QWidget):
         self.update_names_layout()
 
     def save_current_seating_arrangement(self):
-        self.saved_seating_arrangement = []
+        result = {
+            'boys': [(name, random_value) for name, random_value, _ in self.boys],
+            'girls': [(name, random_value) for name, random_value, _ in self.girls],
+            'seating_arrangement': []
+        }
         for row in range(12):
             for col in range(12):
                 seat = self.seats[row][col]
                 seat_color = seat.palette().color(QPalette.Button).name()
                 seat_text = seat.text()
-                self.saved_seating_arrangement.append({
+                result['seating_arrangement'].append({
                     'row': row,
                     'col': col,
                     'color': seat_color,
                     'text': seat_text
                 })
+        filename = "temp_seating_arrangement.json"
+        with open(filename, 'w') as file:
+            json.dump(result, file, indent=4)
 
-    def restore_seating_arrangement(self):
+    def restore_seating_arrangement(self,IFreload):
         try:
             with open('temp_seating_arrangement.json', 'r') as file:
-                seating_arrangement = json.load(file)
-                for seat_info in seating_arrangement:
+                result = json.load(file)
+                if IFreload:
+                    self.boys = [(name, random_value, self.create_label(name, random_value)) for name, random_value in
+                                 result['boys']]
+                    self.girls = [(name, random_value, self.create_label(name, random_value)) for name, random_value in
+                                  result['girls']]
+                    self.update_names_layout()
+
+                for seat_info in result['seating_arrangement']:
                     row = seat_info['row']
                     col = seat_info['col']
                     color = seat_info['color']
@@ -176,9 +219,10 @@ class SeatingArrangement(QWidget):
                     seat = self.seats[row][col]
                     seat.setStyleSheet(f"background-color: {color};")
                     seat.setText(text)
-            os.remove('temp_seating_arrangement.json')  # 删除临时文件
             self.check_seating_balance()
-        except FileNotFoundError:
+            os.remove('temp_seating_arrangement.json')  # 删除临时文件
+        except:
+            os.remove('temp_seating_arrangement.json')  # 删除临时文件
             pass
 
     def clear_layout(self, layout):
@@ -212,7 +256,6 @@ class SeatingArrangement(QWidget):
         self.names_layout.addWidget(girls_group)
         self.names_layout.addSpacing(20)  # Add some space between girls and ignore
         self.names_layout.addWidget(ignore_group)
-
     def add_names_to_layout(self, names, layout, columns, has_random_value):
         total_count = len(names)
         max_items_per_column = (total_count + columns - 1) // columns  # 计算每列的最大项数
@@ -302,21 +345,32 @@ class SeatingArrangement(QWidget):
         self.edit_mode_window.show()
 
     def save_current_seating_arrangement_to_file(self):
-        seating_arrangement = []
+        result = {
+            'boys': [(name, random_value) for name, random_value, _ in self.boys],
+            'girls': [(name, random_value) for name, random_value, _ in self.girls],
+            'seating_arrangement': []
+        }
         for row in range(12):
             for col in range(12):
                 seat = self.seats[row][col]
                 seat_color = seat.palette().color(QPalette.Button).name()
                 seat_text = seat.text()
-                seating_arrangement.append({
+                result['seating_arrangement'].append({
                     'row': row,
                     'col': col,
                     'color': seat_color,
                     'text': seat_text
                 })
+        file_index = 1
+        filename = f'temp_seating_arrangement.json'
 
-        with open('temp_seating_arrangement.json', 'w') as file:
-            json.dump(seating_arrangement, file, indent=4)
+        # 检查文件是否已存在，递增数字
+        while os.path.exists(filename):
+            file_index += 1
+            filename = f'temp_seating_arrangement.json'
+
+        with open(filename, 'w') as file:
+            json.dump(result, file, indent=4)
 
     def create_color_buttons(self):
         self.color_buttons = QButtonGroup(self)
@@ -324,75 +378,88 @@ class SeatingArrangement(QWidget):
 
         self.white_button = QPushButton("空白位置")
         self.white_button.setStyleSheet("background-color: white;")
-        self.white_button.setFixedSize(400, 30)
+        self.white_button.setFont(QFont('Arial', 14))
+        self.white_button.setFixedHeight(30)
         self.color_buttons.addButton(self.white_button, 0)
         self.color_buttons_layout.addWidget(self.white_button)
 
         self.lightblue_button = QPushButton("男生位置")
         self.lightblue_button.setStyleSheet("background-color: lightblue;")
-        self.lightblue_button.setFixedSize(400, 30)
+        self.lightblue_button.setFont(QFont('Arial', 14))
+        self.lightblue_button.setFixedHeight(30)
         self.color_buttons.addButton(self.lightblue_button, 1)
         self.color_buttons_layout.addWidget(self.lightblue_button)
 
         self.lightyellow_button = QPushButton("女生位置")
         self.lightyellow_button.setStyleSheet("background-color: lightyellow;")
-        self.lightyellow_button.setFixedSize(400, 30)
+        self.lightyellow_button.setFont(QFont('Arial', 14))
+        self.lightyellow_button.setFixedHeight(30)
         self.color_buttons.addButton(self.lightyellow_button, 2)
         self.color_buttons_layout.addWidget(self.lightyellow_button)
 
         self.gray_button = QPushButton("无意义位置")
         self.gray_button.setStyleSheet("background-color: gray;")
+        self.gray_button.setFont(QFont('Arial', 14))
+        self.gray_button.setFixedHeight(30)
         self.color_buttons.addButton(self.gray_button, 3)
         self.color_buttons_layout.addWidget(self.gray_button)
+
+        self.fullscreen_button = QPushButton("全屏展示当前座位表")
+        self.fullscreen_button.setStyleSheet("background-color: orange;")
+        self.fullscreen_button.setFont(QFont('Arial', 14))
+        self.fullscreen_button.setFixedHeight(30)
+        self.fullscreen_button.clicked.connect(self.enter_fullscreen_mode)
+        self.color_buttons.addButton(self.fullscreen_button, 4)
+        self.color_buttons_layout.addWidget(self.fullscreen_button)
 
     def create_action_buttons(self):
         button_font = QFont('Arial', 14)
 
         self.randomize_button = QPushButton("开始随机")
         self.randomize_button.setFont(button_font)
-        self.randomize_button.setFixedSize(200, 50)
+        self.randomize_button.setFixedHeight(50)
         self.randomize_button.clicked.connect(self.randomize_seating)
         self.action_buttons_layout.addWidget(self.randomize_button)
 
         self.save_button = QPushButton("保存当前座位分布表")
         self.save_button.setFont(button_font)
-        self.save_button.setFixedSize(200, 50)
+        self.save_button.setFixedHeight(50)
         self.save_button.clicked.connect(self.save_seating_arrangement)
         self.action_buttons_layout.addWidget(self.save_button)
 
         self.project_button = QPushButton("将结果投影到座位表上")
         self.project_button.setFont(button_font)
-        self.project_button.setFixedSize(200, 50)
+        self.project_button.setFixedHeight(50)
         self.project_button.clicked.connect(self.project_to_seating)
         self.action_buttons_layout.addWidget(self.project_button)
 
         self.clear_projection_button = QPushButton("清除投影的结果")
         self.clear_projection_button.setFont(button_font)
-        self.clear_projection_button.setFixedSize(200, 50)
+        self.clear_projection_button.setFixedHeight(50)
         self.clear_projection_button.clicked.connect(self.clear_projection)
         self.action_buttons_layout.addWidget(self.clear_projection_button)
 
         self.save_random_result_button = QPushButton("保存本次随机结果")
         self.save_random_result_button.setFont(button_font)
-        self.save_random_result_button.setFixedSize(200, 50)
+        self.save_random_result_button.setFixedHeight(50)
         self.save_random_result_button.clicked.connect(self.save_random_result)
         self.action_buttons_layout.addWidget(self.save_random_result_button)
 
         self.load_random_result_button = QPushButton("加载保存的结果")
         self.load_random_result_button.setFont(button_font)
-        self.load_random_result_button.setFixedSize(200, 50)
+        self.load_random_result_button.setFixedHeight(50)
         self.load_random_result_button.clicked.connect(self.load_random_result)
         self.action_buttons_layout.addWidget(self.load_random_result_button)
 
         self.edit_names_button = QPushButton('编辑名字')
         self.edit_names_button.setFont(button_font)
-        self.edit_names_button.setFixedSize(200, 50)
+        self.edit_names_button.setFixedHeight(50)
         self.edit_names_button.clicked.connect(self.enter_edit_mode)
         self.action_buttons_layout.addWidget(self.edit_names_button)
 
         self.export_button = QPushButton("导出座位表到 Excel")
         self.export_button.setFont(button_font)
-        self.export_button.setFixedSize(200, 50)
+        self.export_button.setFixedHeight(50)
         self.export_button.clicked.connect(self.export_seating_arrangement)  # 连接导出功能
         self.action_buttons_layout.addWidget(self.export_button)
 
@@ -561,7 +628,7 @@ class SeatingArrangement(QWidget):
 
         with open(filename, 'w') as file:
             json.dump(result, file, indent=4)
-        QMessageBox.information(None,"保存成功",f"配置保存为：{filename}。",QMessageBox.Ok )
+        QMessageBox.information(None,"保存成功",f"配置保存为{filename}。",QMessageBox.Ok )
     def load_random_result(self):
         filename, _ = QFileDialog.getOpenFileName(self, "选择要加载的结果文件", "", "JSON Files (*.json)")
         if not filename:  # 如果用户取消了对话框
@@ -609,15 +676,19 @@ class SeatingArrangement(QWidget):
 
         if boy_count > total_boys or girl_count > total_girls:
             self.warning_label.setText("Warning: 当前学生数量少于座位数")
+            self.warning_label.setFont(QFont('Arial', 14))
         elif boy_count < total_boys or girl_count < total_girls:
             self.warning_label.setText("Warning: 当前学生数量多于座位数")
+            self.warning_label.setFont(QFont('Arial', 14))
         else:
             self.warning_label.setText("当前学生数量和座位数量相匹配")
+            self.warning_label.setFont(QFont('Arial', 14))
 
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     ex = SeatingArrangement()
     ex.show()
+    ex.check_seating_balance()
     ex.check_first_run()
     sys.exit(app.exec_())
