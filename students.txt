@@ -1,6 +1,9 @@
-[boys]
+[group_first]
+张三
 李四
-[girls]
-华三十一
+王五
+[group_second]
+戚三十二
+谢三十三
+邹三十四
 [ignore]
-袁六十一
