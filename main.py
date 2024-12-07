@@ -1,47 +1,34 @@
 # main.py
-import sys, os
+import sys
 import random
 import json
 from datetime import datetime
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QGridLayout, \
-    QButtonGroup, QFileDialog, QGroupBox, QMessageBox
+    QButtonGroup, QFileDialog, QGroupBox, QMessageBox, QDialog, QMainWindow
 from PyQt5.QtCore import Qt, QTimer, QSize
 from PyQt5.QtGui import QFont, QPalette, QPixmap, QIcon
 from edit_mode import EditMode
 from export_to_excel import export_seating_arrangement
-
-from win32 import win32api, win32gui, win32print
-from win32.lib import win32con
-from win32.win32api import GetSystemMetrics
+from utils.get_yaml_value import get_yaml_value
 import os
-import time
+from utils.setting_utils import kill_process
 
-def get_real_resolution():
-    """获取真实的分辨率"""
-    hDC = win32gui.GetDC(0)
-    # 横向分辨率
-    w = win32print.GetDeviceCaps(hDC, win32con.DESKTOPHORZRES)
-    # 纵向分辨率
-    h = win32print.GetDeviceCaps(hDC, win32con.DESKTOPVERTRES)
-    return w, h
 
-def get_screen_size():
-    """获取缩放后的分辨率"""
-    w = GetSystemMetrics(0)
-    h = GetSystemMetrics(1)
-    return w, h
+auto_project = get_yaml_value("auto_project")
+regulatory_taskkill = get_yaml_value("regulatory_taskkill")
+small_point = get_yaml_value("small_point")
 
-def get_dpi():
-    real_resolution = get_real_resolution()
-    screen_size = get_screen_size()
 
-    screen_scale_rate = round(real_resolution[0] / screen_size[0], 2)
-    screen_scale_rate = screen_scale_rate * 100
-    return screen_scale_rate
+class LoadingDialog(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("加载中")
+        self.setGeometry(500, 100, 700, 100)
+        layout = QVBoxLayout()
+        label = QLabel("正在加载，请稍候...")
+        layout.addWidget(label)
+        self.setLayout(layout)
 
-userdpi = get_dpi()
-print('当前系统缩放率为:', userdpi, '%', end='')
-font_scale = 1/(userdpi/100)
 class ImageViewer(QWidget):
     def __init__(self):
         super().__init__()
@@ -93,18 +80,28 @@ class ImageViewer(QWidget):
 
 class SeatingArrangement(QWidget):
     def __init__(self):
+        loading_dialog = LoadingDialog()
+        loading_dialog.show()
+        from utils.get_font import font_scale
         super().__init__()
         self.edit_mode_window = None
         self.selected_color = None  # 初始化 selected_color 属性
         self.saved_seating_arrangement = None  # 保存当前座位表状态
         self.font_scale = font_scale  # 字体大小倍数
+
+        self.small_point = small_point
+        self.auto_project = auto_project
+        self.regulatory_taskkill = regulatory_taskkill
+
         self.initUI()
+        loading_dialog.close()  # 关闭加载对话框
     def showEvent(self, event):
         # 在窗口显示时调整大小到最小可缩小的尺寸
         self.adjustSize()  # 调整窗口大小
         super().showEvent(event)  # 调用父类的 showEvent
 
     def initUI(self):
+
         self.setWindowTitle('随机座位生成器')
         self.setGeometry(100, 50, 1280, 1000)  # Ensure vertical resolution does not exceed 800
 
@@ -145,7 +142,6 @@ class SeatingArrangement(QWidget):
 
         self.load_names()
         self.load_seating_arrangement()
-
     def check_and_update_students_file(self):
         filename = 'students.txt'
 
@@ -302,6 +298,9 @@ class SeatingArrangement(QWidget):
                     seat.setStyleSheet(f"background-color: {color};")
                     seat.setText(text)
             self.check_seating_balance()
+            self.auto_project = get_yaml_value("auto_project")
+            self.regulatory_taskkill = get_yaml_value("regulatory_taskkill")
+            self.small_point = get_yaml_value("small_point")
             os.remove('temp_seating_arrangement.json')  # 删除临时文件
         except:
             os.remove('temp_seating_arrangement.json')  # 删除临时文件
@@ -328,13 +327,13 @@ class SeatingArrangement(QWidget):
         self.add_names_to_layout(self.ignore, ignore_layout, 3, False)
 
         group_first_group = QGroupBox("组别一")
-        group_first_group.setFont(QFont('Arial', int(14 * font_scale)))
+        group_first_group.setFont(QFont('Arial', int(14 * self.font_scale)))
         group_first_group.setLayout(group_first_layout)
         group_second_group = QGroupBox("组别二")
-        group_second_group.setFont(QFont('Arial', int(14 * font_scale)))
+        group_second_group.setFont(QFont('Arial', int(14 * self.font_scale)))
         group_second_group.setLayout(group_second_layout)
         ignore_group = QGroupBox("忽略（不排入位置）")
-        ignore_group.setFont(QFont('Arial', int(14 * font_scale)))
+        ignore_group.setFont(QFont('Arial', int(14 * self.font_scale)))
         ignore_group.setLayout(ignore_layout)
 
         self.names_layout.addWidget(group_first_group)
@@ -416,7 +415,6 @@ class SeatingArrangement(QWidget):
         export_seating_arrangement(self.seats, self.group_first, self.group_second)  # 调用导出功能
 
     def enter_edit_mode(self):
-        print("Entering edit mode...")  # 调试信息
         # 保存当前座位表状态到临时文件
         if os.path.exists('temp_seating_arrangement.json'):
             os.remove('temp_seating_arrangement.json')
@@ -432,6 +430,25 @@ class SeatingArrangement(QWidget):
 
         self.edit_mode_window = EditMode(self)
         self.edit_mode_window.show()
+
+    def open_settings(self):
+        # 保存当前界面状态到临时文件
+        if os.path.exists('temp_seating_arrangement.json'):
+            os.remove('temp_seating_arrangement.json')
+            print("Deleted temp_seating_arrangement.json")
+        self.save_current_seating_arrangement_to_file()
+
+        # 清空界面
+        self.clear_layout(self.names_layout)
+        self.clear_layout(self.grid_layout)
+        self.clear_layout(self.color_buttons_layout)
+        self.clear_layout(self.action_buttons_layout)
+        self.warning_label.clear()
+
+        # 创建并显示设置窗口
+        from setting import SettingsWindow
+        self.settings_window = SettingsWindow(self)
+        self.settings_window.show()
 
     def save_current_seating_arrangement_to_file(self):
         result = {
@@ -506,52 +523,34 @@ class SeatingArrangement(QWidget):
 
     def create_action_buttons(self):
         button_font = QFont('Arial', int(14 * self.font_scale))
+        action_buttons_layout = QGridLayout()  # 使用网格布局
 
+        # 创建“开始随机”按钮
         self.randomize_button = QPushButton("开始随机")
         self.randomize_button.setIcon(QIcon("./img/random.png"))  # 设置图标
         self.randomize_button.setIconSize(QSize(int(32 * self.font_scale), int(32 * self.font_scale)))  # 设置图标大小
         self.randomize_button.setFont(button_font)
         self.randomize_button.setFixedHeight(50)
         self.randomize_button.clicked.connect(self.randomize_seating)
-        self.action_buttons_layout.addWidget(self.randomize_button)
+        action_buttons_layout.addWidget(self.randomize_button, 0, 0)  # 第一行第一列
 
-        #self.save_button = QPushButton("保存当前座位分布表")
-#        self.save_button.setFont(button_font)
-#        self.save_button.setFixedHeight(50)
-#        self.save_button.clicked.connect(self.save_seating_arrangement)
-#       self.action_buttons_layout.addWidget(self.save_button)
-
+        # 创建“投影结果到座位表”按钮
         self.project_button = QPushButton("投影结果到座位表")
         self.project_button.setIcon(QIcon("./img/project.png"))  # 设置图标
         self.project_button.setIconSize(QSize(int(32 * self.font_scale), int(32 * self.font_scale)))  # 设置图标大小
         self.project_button.setFont(button_font)
         self.project_button.setFixedHeight(50)
         self.project_button.clicked.connect(self.project_to_seating)
-        self.action_buttons_layout.addWidget(self.project_button)
+        action_buttons_layout.addWidget(self.project_button, 0, 1)  # 第一行第二列
 
+        # 创建“清除投影的结果”按钮
         self.clear_projection_button = QPushButton("清除投影的结果")
         self.clear_projection_button.setIcon(QIcon("./img/clear.png"))  # 设置图标
         self.clear_projection_button.setIconSize(QSize(int(32 * self.font_scale), int(32 * self.font_scale)))  # 设置图标大小
         self.clear_projection_button.setFont(button_font)
         self.clear_projection_button.setFixedHeight(50)
         self.clear_projection_button.clicked.connect(self.clear_projection)
-        self.action_buttons_layout.addWidget(self.clear_projection_button)
-
-        self.save_random_result_button = QPushButton("保存本次随机结果")
-        self.save_random_result_button.setIcon(QIcon("./img/save.png"))  # 设置图标
-        self.save_random_result_button.setIconSize(QSize(int(32 * self.font_scale), int(32 * self.font_scale)))  # 设置图标大小
-        self.save_random_result_button.setFont(button_font)
-        self.save_random_result_button.setFixedHeight(50)
-        self.save_random_result_button.clicked.connect(self.save_random_result)
-        self.action_buttons_layout.addWidget(self.save_random_result_button)
-
-        self.load_random_result_button = QPushButton("加载保存的结果")
-        self.load_random_result_button.setIcon(QIcon("./img/load.png"))  # 设置图标
-        self.load_random_result_button.setIconSize(QSize(int(32 * self.font_scale), int(32 * self.font_scale)))  # 设置图标大小
-        self.load_random_result_button.setFont(button_font)
-        self.load_random_result_button.setFixedHeight(50)
-        self.load_random_result_button.clicked.connect(self.load_random_result)
-        self.action_buttons_layout.addWidget(self.load_random_result_button)
+        action_buttons_layout.addWidget(self.clear_projection_button, 0, 2)  # 第一行第三列
 
         self.edit_names_button = QPushButton('编辑名字')
         self.edit_names_button.setIcon(QIcon("./img/edit_name.png"))  # 设置图标
@@ -560,16 +559,52 @@ class SeatingArrangement(QWidget):
         self.edit_names_button.setFont(button_font)
         self.edit_names_button.setFixedHeight(50)
         self.edit_names_button.clicked.connect(self.enter_edit_mode)
-        self.action_buttons_layout.addWidget(self.edit_names_button)
+        action_buttons_layout.addWidget(self.edit_names_button, 0, 3)  # 第一行第四列
 
-        self.export_button = QPushButton("导出座位表到 Excel")
-        self.export_button.setIcon(QIcon("./img/excel.png"))  # 设置图标
-        self.export_button.setIconSize(
+        # 创建“设置”按钮
+        self.settings_button = QPushButton("设置")
+        self.settings_button.setIcon(QIcon("./img/setting.png"))  # 设置图标
+        self.settings_button.setIconSize(QSize(int(32 * self.font_scale), int(32 * self.font_scale)))  # 设置图标大小
+        self.settings_button.setFont(button_font)
+        self.settings_button.setFixedHeight(50)  # 缩小按钮高度
+        self.settings_button.setFixedWidth(160)  # 设置按钮宽度
+        self.settings_button.clicked.connect(self.open_settings)  # 连接设置功能
+        action_buttons_layout.addWidget(self.settings_button, 0, 4)  # 第一行第四列
+
+        # 创建“保存本次随机结果”按钮
+        self.save_random_result_button = QPushButton("保存结果")
+        self.save_random_result_button.setIcon(QIcon("./img/save.png"))  # 设置图标
+        self.save_random_result_button.setIconSize(
             QSize(int(32 * self.font_scale), int(32 * self.font_scale)))  # 设置图标大小
+        self.save_random_result_button.setFont(button_font)
+        self.save_random_result_button.setFixedWidth(160)  # 设置按钮宽度
+        self.save_random_result_button.setFixedHeight(50)  # 缩小按钮高度
+        self.save_random_result_button.clicked.connect(self.save_random_result)
+        action_buttons_layout.addWidget(self.save_random_result_button, 0, 5)  # 第一行第五列
+
+        # 创建“加载保存的结果”按钮
+        self.load_random_result_button = QPushButton("加载结果")
+        self.load_random_result_button.setIcon(QIcon("./img/load.png"))  # 设置图标
+        self.load_random_result_button.setIconSize(
+            QSize(int(32 * self.font_scale), int(32 * self.font_scale)))  # 设置图标大小
+        self.load_random_result_button.setFont(button_font)
+        self.load_random_result_button.setFixedWidth(160)  # 设置按钮宽度
+        self.load_random_result_button.setFixedHeight(50)  # 缩小按钮高度
+        self.load_random_result_button.clicked.connect(self.load_random_result)
+        action_buttons_layout.addWidget(self.load_random_result_button, 0, 6)  # 第二行第一列
+
+        # 创建“导出座位表到 Excel”按钮
+        self.export_button = QPushButton("导出Excel")
+        self.export_button.setIcon(QIcon("./img/excel.png"))  # 设置图标
+        self.export_button.setIconSize(QSize(int(32 * self.font_scale), int(32 * self.font_scale)))  # 设置图标大小
         self.export_button.setFont(button_font)
-        self.export_button.setFixedHeight(50)
+        self.export_button.setFixedHeight(50)  # 缩小按钮高度
+        self.export_button.setFixedWidth(160)  # 设置按钮宽度
         self.export_button.clicked.connect(self.export_seating_arrangement)  # 连接导出功能
-        self.action_buttons_layout.addWidget(self.export_button)
+        action_buttons_layout.addWidget(self.export_button, 0, 7)  # 第二行第二列
+        # 将按钮布局添加到主布局中
+        self.action_buttons_layout.addLayout(action_buttons_layout)  # 只传递布局
+
 
     def set_selected_color(self, id):
         if id == 0:
@@ -622,7 +657,7 @@ class SeatingArrangement(QWidget):
             nonlocal current_index
             if current_index < len(all_students):
                 name, _, label = all_students[current_index]
-                random_value = round(random.uniform(0, 1), 4)  # 生成随机数
+                random_value = round(random.uniform(0, 1), self.small_point)  # 生成随机数，保留小数
                 all_students[current_index] = (name, random_value, label)  # 赋值
                 label.setText(f"{name} {random_value}")  # 更新标签文本
 
@@ -641,6 +676,8 @@ class SeatingArrangement(QWidget):
 
                 # 更新布局
                 self.update_names_layout()
+                if self.auto_project:
+                    self.project_to_seating()
 
         # 创建定时器，每50毫秒调用一次 assign_next_value
         timer = QTimer()
@@ -794,6 +831,10 @@ class SeatingArrangement(QWidget):
 
 
 if __name__ == '__main__':
+    import threading
+    thread = threading.Thread(target=kill_process,args=("SeewoAbility.exe",))
+    thread.daemon = True  # 设置为守护线程，主程序退出时自动结束
+    thread.start()
     app = QApplication(sys.argv)
     ex = SeatingArrangement()
     ex.show()

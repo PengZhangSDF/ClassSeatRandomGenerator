@@ -2,41 +2,14 @@ import sys
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGroupBox, QPushButton, QMessageBox, QLineEdit
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
-from win32 import win32api, win32gui, win32print
-from win32.lib import win32con
-from win32.win32api import GetSystemMetrics
-import os
-import time
+from utils.get_font import font_scale
 
-def get_real_resolution():
-    """获取真实的分辨率"""
-    hDC = win32gui.GetDC(0)
-    # 横向分辨率
-    w = win32print.GetDeviceCaps(hDC, win32con.DESKTOPHORZRES)
-    # 纵向分辨率
-    h = win32print.GetDeviceCaps(hDC, win32con.DESKTOPVERTRES)
-    return w, h
 
-def get_screen_size():
-    """获取缩放后的分辨率"""
-    w = GetSystemMetrics(0)
-    h = GetSystemMetrics(1)
-    return w, h
 
-def get_dpi():
-    real_resolution = get_real_resolution()
-    screen_size = get_screen_size()
-
-    screen_scale_rate = round(real_resolution[0] / screen_size[0], 2)
-    screen_scale_rate = screen_scale_rate * 100
-    return screen_scale_rate
-
-userdpi = get_dpi()
-print('当前系统缩放率为:', userdpi, '%', end='')
-font_scale = 1/(userdpi/100)
 class SelectableLabel(QLabel):
     def __init__(self, text, parent=None):
         super().__init__(text, parent)
+
         self.setFont(QFont('Arial', int(16 * font_scale)))
         self.setAlignment(Qt.AlignLeft)
         self.setStyleSheet("border: 1px solid black;")
