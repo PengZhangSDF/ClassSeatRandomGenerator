@@ -4,15 +4,15 @@ import random
 import json
 from datetime import datetime
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QGridLayout, \
-    QButtonGroup, QFileDialog, QGroupBox, QMessageBox, QDialog, QMainWindow
+    QButtonGroup, QFileDialog, QGroupBox, QMessageBox, QDialog
 from PyQt5.QtCore import Qt, QTimer, QSize
 from PyQt5.QtGui import QFont, QPalette, QPixmap, QIcon
-from edit_mode import EditMode
-from export_to_excel import export_seating_arrangement
+from function.edit_mode import EditMode
+from function.export_to_excel import export_seating_arrangement
 from utils.get_yaml_value import get_yaml_value
 import os
 from utils.setting_utils import kill_process
-
+from function.swap_position import SwapPositions
 
 auto_project = get_yaml_value("auto_project")
 regulatory_taskkill = get_yaml_value("regulatory_taskkill")
@@ -88,6 +88,7 @@ class SeatingArrangement(QWidget):
         self.selected_color = None  # 初始化 selected_color 属性
         self.saved_seating_arrangement = None  # 保存当前座位表状态
         self.font_scale = font_scale  # 字体大小倍数
+        self.is_in_swap_mode = False  # 添加状态标志
 
         self.small_point = small_point
         self.auto_project = auto_project
@@ -187,13 +188,24 @@ class SeatingArrangement(QWidget):
         with open(filename, 'w', encoding='utf-8') as file:
             file.writelines(new_lines)
     def enter_fullscreen_mode(self):
+        print("进入全屏模式")
         self.fullscreen_window = QWidget()
         self.fullscreen_window.setWindowTitle("全屏展示座位表")
         self.fullscreen_window.setGeometry(0, 0, 1920, 1080)  # Set to fullscreen size
         layout = QVBoxLayout()
 
+        title_label = QLabel("全屏座位安排:临时互换模式已开启")
+        title_label.setFont(QFont('Arial', int(24 * self.font_scale)))  # 设置字体和大小
+        title_label.setAlignment(Qt.AlignCenter)  # 居中对齐
+        layout.addWidget(title_label)  # 将标题添加到布局
+
         # Create a scaled seating grid
         scaled_grid = QGridLayout()
+        self.temp_swap_positions = SwapPositions(self)  # 创建临时交换位置实例
+        self.temp_swap_positions.exit_mode = False
+
+        self.scaled_seats = []  # 用于存储全屏模式下的座位按钮
+
         for row in range(12):
             for col in range(12):
                 seat = self.seats[row][col]
@@ -201,7 +213,10 @@ class SeatingArrangement(QWidget):
                 scaled_seat.setFixedSize(120, 60)  # Scale size by 1.5
                 scaled_seat.setStyleSheet(seat.styleSheet())  # Keep the same style
                 scaled_seat.setFont(QFont('Arial', int(21 * self.font_scale)))  # Scale font size by 1.5
+                scaled_seat.setProperty("original_color", seat.palette().color(QPalette.Button).name())  # 保存原始颜色
+                scaled_seat.clicked.connect(lambda _, s=scaled_seat: self.temp_swap_positions.select_seat(s))  # 连接临时交换位置
                 scaled_grid.addWidget(scaled_seat, row, col)
+                self.scaled_seats.append(scaled_seat)  # 添加到列表中
 
         layout.addLayout(scaled_grid)
 
@@ -211,11 +226,16 @@ class SeatingArrangement(QWidget):
         exit_button.setFont(QFont('Arial', int(24 * self.font_scale)))
         exit_button.clicked.connect(self.exit_fullscreen_mode)
         layout.addWidget(exit_button)
+        layout.addStretch(1)
 
         self.fullscreen_window.setLayout(layout)
         self.fullscreen_window.show()
 
+
     def exit_fullscreen_mode(self):
+        self.temp_swap_positions.exit_swap_mode()  # 退出临时交换模式
+        for seat in self.scaled_seats:
+            seat.setStyleSheet("")  # 清除样式
         self.fullscreen_window.close()
     def check_first_run(self):
         if not os.path.exists("hello_world.txt"):
@@ -446,7 +466,7 @@ class SeatingArrangement(QWidget):
         self.warning_label.clear()
 
         # 创建并显示设置窗口
-        from setting import SettingsWindow
+        from function.setting import SettingsWindow
         self.settings_window = SettingsWindow(self)
         self.settings_window.show()
 
@@ -478,9 +498,25 @@ class SeatingArrangement(QWidget):
         with open(filename, 'w') as file:
             json.dump(result, file, indent=4)
 
+    def enter_swap_mode(self):
+        print("进入交换模式")
+        self.is_in_swap_mode = True  # 设置状态标志
+        self.swap_positions = SwapPositions(self)  # 创建交换位置实例
+        self.swap_positions.exit_mode = False
+        for row in self.seats:
+            for seat in row:
+                seat.setProperty("original_color", seat.palette().color(QPalette.Button).name())  # 保存原始颜色
+                seat.clicked.disconnect()  # 先断开之前的连接
+                seat.clicked.connect(lambda _, s=seat: self.swap_positions.select_seat(s))  # 连接座位点击事件
+
     def create_color_buttons(self):
         self.color_buttons = QButtonGroup(self)
         self.color_buttons.buttonClicked[int].connect(self.set_selected_color)
+
+        # 创建 QLabel 用于显示当前选择的按钮类型
+        self.selected_color_label = QLabel("点击颜色按钮以更换座位类型")
+        self.selected_color_label.setFont(QFont('Arial', int(14 * self.font_scale)))  # 使用字体倍数
+        self.color_buttons_layout.addWidget(self.selected_color_label)  # 将标签添加到布局中
 
         self.white_button = QPushButton("空白位置")
         self.white_button.setStyleSheet("background-color: white;")
@@ -510,16 +546,34 @@ class SeatingArrangement(QWidget):
         self.color_buttons.addButton(self.gray_button, 3)
         self.color_buttons_layout.addWidget(self.gray_button)
 
-        self.fullscreen_button = QPushButton("全屏展示当前座位表")
-        self.fullscreen_button.setStyleSheet("background-color: orange;")
-        self.fullscreen_button.setIcon(QIcon("./img/expand.png"))  # 设置图标
-        self.fullscreen_button.setIconSize(
-            QSize(int(18 * self.font_scale), int(18 * self.font_scale)))  # 设置图标大小
-        self.fullscreen_button.setFont(QFont('Arial', int(14 * self.font_scale)))  # 使用字体倍数
-        self.fullscreen_button.setFixedHeight(30)
-        self.fullscreen_button.clicked.connect(self.enter_fullscreen_mode)
-        self.color_buttons.addButton(self.fullscreen_button, 4)
-        self.color_buttons_layout.addWidget(self.fullscreen_button)
+        self.swap_button = QPushButton("交换位置")
+        self.swap_button.setStyleSheet("background-color: yellow;")
+        self.swap_button.setFont(QFont('Arial', int(14 * self.font_scale)))  # 使用字体倍数
+        self.swap_button.setFixedHeight(30)
+        self.swap_button.clicked.connect(self.enter_swap_mode)  # 连接到进入交换模式的函数
+        self.color_buttons_layout.addWidget(self.swap_button)
+
+        # 连接按钮点击事件
+        self.white_button.clicked.connect(self.on_color_button_clicked)
+        self.lightblue_button.clicked.connect(self.on_color_button_clicked)
+        self.lightyellow_button.clicked.connect(self.on_color_button_clicked)
+        self.gray_button.clicked.connect(self.on_color_button_clicked)
+        self.swap_button.clicked.connect(self.swap_button_lable)
+    def swap_button_lable(self):
+        self.selected_color_label.setStyleSheet("color: red;")  # 设置文本颜色为红色
+        self.selected_color_label.setText(f"注意：您正处于交换模式中！")
+
+    def on_color_button_clicked(self):
+        if self.is_in_swap_mode:
+            self.swap_positions.exit_swap_mode()  # 退出交换模式
+            self.is_in_swap_mode = False  # 重置状态标志
+        # 获取被点击的按钮
+        clicked_button = self.sender()
+        self.selected_color_label.setStyleSheet("color: black;")
+        # 更新 QLabel 显示当前选择的按钮类型
+        self.selected_color_label.setText(f"当前选择: {clicked_button.text()}")
+
+
 
     def create_action_buttons(self):
         button_font = QFont('Arial', int(14 * self.font_scale))
@@ -561,15 +615,26 @@ class SeatingArrangement(QWidget):
         self.edit_names_button.clicked.connect(self.enter_edit_mode)
         action_buttons_layout.addWidget(self.edit_names_button, 0, 3)  # 第一行第四列
 
+        self.fullscreen_button = QPushButton("全屏展示当前座位表")
+        self.fullscreen_button.setStyleSheet("background-color: orange;")
+        self.fullscreen_button.setIcon(QIcon("./img/expand.png"))  # 设置图标
+        self.fullscreen_button.setIconSize(
+            QSize(int(18 * self.font_scale), int(18 * self.font_scale)))  # 设置图标大小
+        self.fullscreen_button.setFont(QFont('Arial', int(14 * self.font_scale)))  # 使用字体倍数
+        self.fullscreen_button.setFixedHeight(50)
+        self.fullscreen_button.clicked.connect(self.enter_fullscreen_mode)
+        self.color_buttons.addButton(self.fullscreen_button, 4)
+        action_buttons_layout.addWidget(self.fullscreen_button,0,4)
+
         # 创建“设置”按钮
         self.settings_button = QPushButton("设置")
         self.settings_button.setIcon(QIcon("./img/setting.png"))  # 设置图标
         self.settings_button.setIconSize(QSize(int(32 * self.font_scale), int(32 * self.font_scale)))  # 设置图标大小
         self.settings_button.setFont(button_font)
         self.settings_button.setFixedHeight(50)  # 缩小按钮高度
-        self.settings_button.setFixedWidth(160)  # 设置按钮宽度
+        self.settings_button.setFixedWidth(140)  # 设置按钮宽度
         self.settings_button.clicked.connect(self.open_settings)  # 连接设置功能
-        action_buttons_layout.addWidget(self.settings_button, 0, 4)  # 第一行第四列
+        action_buttons_layout.addWidget(self.settings_button, 0, 5)  # 第一行第四列
 
         # 创建“保存本次随机结果”按钮
         self.save_random_result_button = QPushButton("保存结果")
@@ -577,10 +642,10 @@ class SeatingArrangement(QWidget):
         self.save_random_result_button.setIconSize(
             QSize(int(32 * self.font_scale), int(32 * self.font_scale)))  # 设置图标大小
         self.save_random_result_button.setFont(button_font)
-        self.save_random_result_button.setFixedWidth(160)  # 设置按钮宽度
+        self.save_random_result_button.setFixedWidth(140)  # 设置按钮宽度
         self.save_random_result_button.setFixedHeight(50)  # 缩小按钮高度
         self.save_random_result_button.clicked.connect(self.save_random_result)
-        action_buttons_layout.addWidget(self.save_random_result_button, 0, 5)  # 第一行第五列
+        action_buttons_layout.addWidget(self.save_random_result_button, 0, 6)  # 第一行第五列
 
         # 创建“加载保存的结果”按钮
         self.load_random_result_button = QPushButton("加载结果")
@@ -588,10 +653,10 @@ class SeatingArrangement(QWidget):
         self.load_random_result_button.setIconSize(
             QSize(int(32 * self.font_scale), int(32 * self.font_scale)))  # 设置图标大小
         self.load_random_result_button.setFont(button_font)
-        self.load_random_result_button.setFixedWidth(160)  # 设置按钮宽度
+        self.load_random_result_button.setFixedWidth(140)  # 设置按钮宽度
         self.load_random_result_button.setFixedHeight(50)  # 缩小按钮高度
         self.load_random_result_button.clicked.connect(self.load_random_result)
-        action_buttons_layout.addWidget(self.load_random_result_button, 0, 6)  # 第二行第一列
+        action_buttons_layout.addWidget(self.load_random_result_button, 0, 7)  # 第二行第一列
 
         # 创建“导出座位表到 Excel”按钮
         self.export_button = QPushButton("导出Excel")
@@ -599,9 +664,9 @@ class SeatingArrangement(QWidget):
         self.export_button.setIconSize(QSize(int(32 * self.font_scale), int(32 * self.font_scale)))  # 设置图标大小
         self.export_button.setFont(button_font)
         self.export_button.setFixedHeight(50)  # 缩小按钮高度
-        self.export_button.setFixedWidth(160)  # 设置按钮宽度
+        self.export_button.setFixedWidth(140)  # 设置按钮宽度
         self.export_button.clicked.connect(self.export_seating_arrangement)  # 连接导出功能
-        action_buttons_layout.addWidget(self.export_button, 0, 7)  # 第二行第二列
+        action_buttons_layout.addWidget(self.export_button, 0, 8)  # 第二行第二列
         # 将按钮布局添加到主布局中
         self.action_buttons_layout.addLayout(action_buttons_layout)  # 只传递布局
 
