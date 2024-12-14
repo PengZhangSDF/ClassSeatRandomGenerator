@@ -71,7 +71,7 @@ class EditMode(QWidget):
         self.group_second = []
         self.ignore = []
 
-        with open('students.txt', 'r', encoding='utf-8') as file:
+        with open('./students.txt', 'r', encoding='utf-8') as file:
             lines = file.readlines()
 
         current_category = None
@@ -289,7 +289,7 @@ class EditMode(QWidget):
         self.close()
 
     def save_names_to_file(self):
-        with open('students.txt', 'w', encoding='utf-8') as file:
+        with open('./students.txt', 'w', encoding='utf-8') as file:
             file.write('[group_first]\n')
             for name, _, _ in self.group_first:
                 file.write(f"{name}\n")

@@ -9,7 +9,7 @@ from utils.get_font import font_scale
 class SettingsWindow(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.config_file = 'config.yaml'  # 配置文件路径
+        self.config_file = './config.yaml'  # 配置文件路径
         self.config = self.load_config()  # 读取配置
         self.font_scale = font_scale
         self.initUI()
