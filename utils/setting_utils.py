@@ -19,6 +19,6 @@ def kill_process(process_name):
                 print(f"未找到进程: {process_name}，可能已经被终止。")
 
             # 等待指定的时间
-            time.sleep(1)
+        time.sleep(1)
 if __name__ == '__main__':
     kill_process("SeewoAbility.exe")
