@@ -28,3 +28,4 @@ def get_dpi():
 
 userdpi = get_dpi()
 font_scale = 1/(userdpi/100)
+print(font_scale)

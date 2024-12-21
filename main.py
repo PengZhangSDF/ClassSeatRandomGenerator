@@ -1,31 +1,19 @@
 # main.py
+import time
+
+from PyQt5.QtWidgets import QApplication, QDialog, QWidget, QVBoxLayout,QLabel
 import sys
-import random
-import json
-from datetime import datetime
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QGridLayout, \
-    QButtonGroup, QFileDialog, QGroupBox, QMessageBox, QDialog
-from PyQt5.QtCore import Qt, QTimer, QSize
-from PyQt5.QtGui import QFont, QPalette, QPixmap, QIcon
-from function.edit_mode import EditMode
-from function.export_to_excel import export_seating_arrangement
-from utils.get_yaml_value import get_yaml_value
-import os
 from utils.setting_utils import kill_process
-from function.swap_position import SwapPositions
-
-auto_project = get_yaml_value("auto_project")
-regulatory_taskkill = get_yaml_value("regulatory_taskkill")
-small_point = get_yaml_value("small_point")
-
+from utils.get_font import font_scale
 
 class LoadingDialog(QDialog):
     def __init__(self):
         super().__init__()
+        self.add_msg = ''
         self.setWindowTitle("加载中")
-        self.setGeometry(500, 100, 700, 100)
+        self.setGeometry(800, 500, 300, 50)
         layout = QVBoxLayout()
-        label = QLabel("正在加载，请稍候...")
+        label = QLabel(f"{self.add_msg}正在加载，请稍候...")
         layout.addWidget(label)
         self.setLayout(layout)
 
@@ -80,9 +68,6 @@ class ImageViewer(QWidget):
 
 class SeatingArrangement(QWidget):
     def __init__(self):
-        loading_dialog = LoadingDialog()
-        loading_dialog.show()
-        from utils.get_font import font_scale
         super().__init__()
         self.edit_mode_window = None
         self.selected_color = None  # 初始化 selected_color 属性
@@ -95,7 +80,7 @@ class SeatingArrangement(QWidget):
         self.regulatory_taskkill = regulatory_taskkill
 
         self.initUI()
-        loading_dialog.close()  # 关闭加载对话框
+
     def showEvent(self, event):
         # 在窗口显示时调整大小到最小可缩小的尺寸
         self.adjustSize()  # 调整窗口大小
@@ -432,6 +417,11 @@ class SeatingArrangement(QWidget):
             self.seats.append(row_seats)
 
     def export_seating_arrangement(self):
+        loading_dialog = LoadingDialog()
+        loading_dialog.add_msg = 'Excel'
+        loading_dialog.show()
+        from function.export_to_excel import export_seating_arrangement
+        loading_dialog.close()
         export_seating_arrangement(self.seats, self.group_first, self.group_second)  # 调用导出功能
 
     def enter_edit_mode(self):
@@ -893,16 +883,46 @@ class SeatingArrangement(QWidget):
         else:
             self.warning_label.setText("当前学生数量和座位数量相匹配")
             self.warning_label.setFont(QFont('Arial', int(14 * self.font_scale)))
-
+def load_heavy_modules():
+    # 延迟导入
+    global EditMode,get_yaml_value, kill_process, SwapPositions
+    from function.edit_mode import EditMode
+    from utils.get_yaml_value import get_yaml_value
+    from utils.setting_utils import kill_process
+    from function.swap_position import SwapPositions
 
 if __name__ == '__main__':
+
+    time_start = time.time()
     import threading
+    thread_load = threading.Thread(target=load_heavy_modules)
+    thread_load.start()
     thread = threading.Thread(target=kill_process,args=("SeewoAbility.exe",))
     thread.daemon = True  # 设置为守护线程，主程序退出时自动结束
     thread.start()
     app = QApplication(sys.argv)
+    loading_dialog = LoadingDialog()
+    thread_load.join()
+    loading_dialog.show()
+
+    from PyQt5.QtWidgets import QHBoxLayout, QPushButton,QGridLayout, \
+        QButtonGroup, QFileDialog, QGroupBox, QMessageBox
+    from PyQt5.QtCore import Qt, QTimer, QSize
+    from PyQt5.QtGui import QFont, QPalette, QPixmap, QIcon
+    import sys
+    import random
+    import json
+    from datetime import datetime
+    import os
+
+    auto_project = get_yaml_value("auto_project")
+    regulatory_taskkill = get_yaml_value("regulatory_taskkill")
+    small_point = get_yaml_value("small_point")
     ex = SeatingArrangement()
     ex.show()
     ex.check_seating_balance()
     ex.check_first_run()
+    loading_dialog.close()  # 关闭加载对话框
+    time_end = time.time()
+    print(time_end - time_start)
     sys.exit(app.exec_())
