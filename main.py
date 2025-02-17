@@ -1,21 +1,10 @@
 # main.py
 import time
-
-from PyQt5.QtWidgets import QApplication, QDialog, QWidget, QVBoxLayout,QLabel
+from pre_loading.pre_loading import LoadingDialog
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit
 import sys
-from utils.setting_utils import kill_process
 from utils.get_font import font_scale
-
-class LoadingDialog(QDialog):
-    def __init__(self):
-        super().__init__()
-        self.add_msg = ''
-        self.setWindowTitle("加载中")
-        self.setGeometry(800, 500, 300, 50)
-        layout = QVBoxLayout()
-        label = QLabel(f"{self.add_msg}正在加载，请稍候...")
-        layout.addWidget(label)
-        self.setLayout(layout)
+from utils.get_yaml_value import adjust_font_scale_add
 
 class ImageViewer(QWidget):
     def __init__(self):
@@ -42,8 +31,8 @@ class ImageViewer(QWidget):
         self.images = [f"./img/{i}.png" for i in range(1, 7)]  # 图片路径
         self.current_index = 0
 
-        self.prev_button.clicked.connect(self.show_prev_image)
-        self.next_button.clicked.connect(self.show_next_image)
+        self.prev_button.clicked.connect(self.show_prev_image) # noqa
+        self.next_button.clicked.connect(self.show_next_image) # noqa
 
         self.show_image()
 
@@ -73,14 +62,18 @@ class SeatingArrangement(QWidget):
         self.selected_color = None  # 初始化 selected_color 属性
         self.saved_seating_arrangement = None  # 保存当前座位表状态
         self.font_scale = font_scale  # 字体大小倍数
+        self.current_font = (self.font_scale + self.get_current_value()) # 当前字体大小
         self.is_in_swap_mode = False  # 添加状态标志
+        self.start = False
 
         self.small_point = small_point
         self.auto_project = auto_project
         self.regulatory_taskkill = regulatory_taskkill
-
         self.initUI()
-
+        # # 设置窗口始终在最上面
+        # self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
+        # # 取消窗口始终在最上面的设置
+        # self.setWindowFlags(self.windowFlags() & ~Qt.WindowStaysOnTopHint)
     def showEvent(self, event):
         # 在窗口显示时调整大小到最小可缩小的尺寸
         self.adjustSize()  # 调整窗口大小
@@ -89,7 +82,11 @@ class SeatingArrangement(QWidget):
     def initUI(self):
 
         self.setWindowTitle('随机座位生成器')
-        self.setGeometry(100, 50, 1280, 1000)  # Ensure vertical resolution does not exceed 800
+        print(f"当前缩放倍率{self.font_scale}")
+        if self.font_scale<0.77:
+            self.setGeometry(100, 0, 1280, 1000)  # Ensure vertical resolution does not exceed 800
+        else:
+            self.setGeometry(100, 20, 1280, 1000)  # Ensure vertical resolution does not exceed 800
 
         main_layout = QVBoxLayout()
 
@@ -128,6 +125,7 @@ class SeatingArrangement(QWidget):
 
         self.load_names()
         self.load_seating_arrangement()
+        self.update_text_box()
     def check_and_update_students_file(self):
         filename = 'students.txt'
 
@@ -179,8 +177,10 @@ class SeatingArrangement(QWidget):
         self.fullscreen_window.setGeometry(0, 0, 1920, 1080)  # Set to fullscreen size
         layout = QVBoxLayout()
 
-        title_label = QLabel("全屏座位安排:临时互换模式已开启")
-        title_label.setFont(QFont('Arial', int(24 * self.font_scale)))  # 设置字体和大小
+        title_label = QLabel("全屏座位安排:临时互换模式已开启\n  前方")
+        font = QFont('Arial', int(28 * self.font_scale))
+        font.setBold(True)  # 设置字体为粗体
+        title_label.setFont(font)
         title_label.setAlignment(Qt.AlignCenter)  # 居中对齐
         layout.addWidget(title_label)  # 将标题添加到布局
 
@@ -195,11 +195,13 @@ class SeatingArrangement(QWidget):
             for col in range(12):
                 seat = self.seats[row][col]
                 scaled_seat = QPushButton(seat.text())
-                scaled_seat.setFixedSize(120, 60)  # Scale size by 1.5
+                scaled_seat.setFixedSize(145, 60)  # Scale size by 1.5
                 scaled_seat.setStyleSheet(seat.styleSheet())  # Keep the same style
-                scaled_seat.setFont(QFont('Arial', int(21 * self.font_scale)))  # Scale font size by 1.5
+                font = QFont('Arial', int(27 * self.font_scale))
+                font.setBold(True)  # 设置字体为粗体
+                scaled_seat.setFont(font)
                 scaled_seat.setProperty("original_color", seat.palette().color(QPalette.Button).name())  # 保存原始颜色
-                scaled_seat.clicked.connect(lambda _, s=scaled_seat: self.temp_swap_positions.select_seat(s))  # 连接临时交换位置
+                scaled_seat.clicked.connect(lambda _, s=scaled_seat: self.temp_swap_positions.select_seat(s))  # 连接临时交换位置 # noqa
                 scaled_grid.addWidget(scaled_seat, row, col)
                 self.scaled_seats.append(scaled_seat)  # 添加到列表中
 
@@ -208,8 +210,8 @@ class SeatingArrangement(QWidget):
         # Exit fullscreen button
         exit_button = QPushButton("退出全屏展示")
         exit_button.setFixedHeight(100)
-        exit_button.setFont(QFont('Arial', int(24 * self.font_scale)))
-        exit_button.clicked.connect(self.exit_fullscreen_mode)
+        exit_button.setFont(QFont('Arial', int(28 * self.font_scale)))
+        exit_button.clicked.connect(self.exit_fullscreen_mode) # noqa
         layout.addWidget(exit_button)
         layout.addStretch(1)
 
@@ -251,7 +253,7 @@ class SeatingArrangement(QWidget):
                 current_category = 'ignore'
             elif line:
                 label = QLabel(f"{line} 0.000")
-                label.setFont(QFont('Arial', int(16 * self.font_scale)))  # Increase font size
+                label.setFont(QFont('Arial', int(16 * self.current_font)))  # Increase font size
                 label.setAlignment(Qt.AlignLeft)
                 if current_category == 'group_first':
                     self.group_first.append((line, 0.000, label))
@@ -283,15 +285,17 @@ class SeatingArrangement(QWidget):
         with open(filename, 'w') as file:
             json.dump(result, file, indent=4)
 
-    def restore_seating_arrangement(self,IFreload):
+    def restore_seating_arrangement(self, IFreload):
         try:
             with open('temp_seating_arrangement.json', 'r') as file:
                 result = json.load(file)
                 if IFreload:
-                    self.group_first = [(name, random_value, self.create_label(name, random_value)) for name, random_value in
-                                 result['group_first']]
-                    self.group_second = [(name, random_value, self.create_label(name, random_value)) for name, random_value in
-                                  result['group_second']]
+                    self.group_first = [(name, random_value, self.create_label(name, random_value)) for
+                                        name, random_value in
+                                        result['group_first']]
+                    self.group_second = [(name, random_value, self.create_label(name, random_value)) for
+                                         name, random_value in
+                                         result['group_second']]
                     self.update_names_layout()
 
                 for seat_info in result['seating_arrangement']:
@@ -302,6 +306,12 @@ class SeatingArrangement(QWidget):
                     seat = self.seats[row][col]
                     seat.setStyleSheet(f"background-color: {color};")
                     seat.setText(text)
+
+                    # 设置字体并加粗
+                    font = QFont('Arial', int(14 * self.current_font))  # 设置字体
+                    font.setBold(True)  # 加粗字体
+                    seat.setFont(font)
+
             self.check_seating_balance()
             self.auto_project = get_yaml_value("auto_project")
             self.regulatory_taskkill = get_yaml_value("regulatory_taskkill")
@@ -323,6 +333,10 @@ class SeatingArrangement(QWidget):
     def update_names_layout(self):
         self.clear_layout(self.names_layout)
 
+        # 设置姓名布局的边距和间距
+        self.names_layout.setContentsMargins(0, 0, 0, 0)  # 上、左、下、右边距均为0
+        self.names_layout.setSpacing(0)  # 控件之间的间距为2像素
+
         group_first_layout = QHBoxLayout()
         group_second_layout = QHBoxLayout()
         ignore_layout = QHBoxLayout()
@@ -343,8 +357,9 @@ class SeatingArrangement(QWidget):
 
         self.names_layout.addWidget(group_first_group)
         self.names_layout.addWidget(group_second_group)
-        self.names_layout.addSpacing(20)  # Add some space between group_second and ignore
+        self.names_layout.addSpacing(0)  # Add some space between group_second and ignore
         self.names_layout.addWidget(ignore_group)
+
     def add_names_to_layout(self, names, layout, columns, has_random_value):
         total_count = len(names)
         max_items_per_column = (total_count + columns - 1) // columns  # 计算每列的最大项数
@@ -370,17 +385,26 @@ class SeatingArrangement(QWidget):
                     number_label = QLabel(f"{i + 1}. ")  # 序号标签，后面加一个空格
                 else:
                     number_label = QLabel(f"      {i + 1}. ")  # 序号标签，后面加一个空格
-                number_label.setFont(QFont('Arial', int(16 * self.font_scale)))  # 确保字号一致
+                font = QFont('Arial', int(16 * self.font_scale))
+                font.setBold(True)  # 设置字体为粗体
+                number_label.setFont(font)
                 number_label.setAlignment(Qt.AlignLeft)
                 h_layout.addWidget(number_label)  # 添加序号标签
                 label.setText(f"{name.split()[0]} {random_value}")  # 只显示名字和随机值
             else:
                 name, label = item
                 number_label = QLabel(f"   {i + 1}. ")  # 序号标签，后面加一个空格
-                number_label.setFont(QFont('Arial', int(16 * self.font_scale)))  # 确保字号一致
+                font = QFont('Arial', int(16 * self.font_scale))
+                font.setBold(True)  # 设置字体为粗体
+                number_label.setFont(font)
                 number_label.setAlignment(Qt.AlignLeft)
                 h_layout.addWidget(number_label)  # 添加序号标签
                 label.setText(f"{name.split()[0]}")  # 只显示名字
+
+            # 设置姓名标签的字体
+            name_font = QFont('Arial', int(16 * self.current_font))
+            name_font.setBold(True)  # 如果需要加粗
+            label.setFont(name_font)
 
             # 设置姓名标签的固定高度
             label.setFixedHeight(20)  # 行间距固定为20
@@ -388,14 +412,23 @@ class SeatingArrangement(QWidget):
 
             column_layouts[col].addLayout(h_layout)  # 将水平布局添加到对应的列布局
 
-        # 填充空白行以保持列高度一致
-        for col in range(columns):
-            current_row_count = column_layouts[col].count()  # 获取当前列的项数
-            for _ in range(max_items_per_column - current_row_count):
-                h_layout = QHBoxLayout()
-                h_layout.setSpacing(3)  # 设置列间隔为3个空格
-                h_layout.addWidget(QLabel(""))  # 添加一个空标签以占位
-                column_layouts[col].addLayout(h_layout)  # 将空布局添加到对应的列布局
+        # 在最后一列的最后一个名字后添加编辑按钮
+        if total_count > 0:
+            last_col = (total_count - 1) // max_items_per_column
+            edit_button = QPushButton("编辑姓名")
+            edit_button.setFixedHeight(30)  # 设置按钮高度与标签相同
+            edit_button.setFont(QFont('Arial', int(16 * self.font_scale)))  # 确保字号一致
+            edit_button.setIcon(QIcon("./img/edit_name.png"))  # 设置图标
+            edit_button.setIconSize(
+                QSize(int(24 * self.font_scale), int(24 * self.font_scale)))  # 设置图标大小
+            edit_button.clicked.connect(self.enter_edit_mode) # noqa
+
+            # 创建一个水平布局来对齐按钮
+            button_layout = QHBoxLayout()
+            button_layout.setSpacing(3)
+            button_layout.addWidget(edit_button)
+
+            column_layouts[last_col].addLayout(button_layout)  # 将按钮布局添加到最后一列
 
         for column_layout in column_layouts:
             layout.addLayout(column_layout)  # 将每列布局添加到主布局
@@ -404,6 +437,8 @@ class SeatingArrangement(QWidget):
         self.seats = []
         self.boy_count = 1
         self.girl_count = 1
+        self.grid_layout.setContentsMargins(0, 0, 0, 0)  # 上、左、下、右边距均为0
+        self.grid_layout.setSpacing(5)  # 控件之间的间距为0
         for row in range(12):
             row_seats = []
             for col in range(12):
@@ -411,10 +446,84 @@ class SeatingArrangement(QWidget):
                 seat.setFixedSize(80, 40)
                 seat.setStyleSheet("background-color: white;")
                 seat.setFont(QFont('Arial', int(14 * self.font_scale)))
-                seat.clicked.connect(self.change_seat_color)
+                seat.clicked.connect(self.change_seat_color)  # noqa
                 self.grid_layout.addWidget(seat, row, col)
                 row_seats.append(seat)
             self.seats.append(row_seats)
+
+        # 在座位表下方添加控件
+        self.add_controls_below_grid()
+
+    def add_controls_below_grid(self):
+        # 创建一个水平布局用于控件
+        controls_layout = QHBoxLayout()
+        # 创建第一个按钮
+        self.button1 = QPushButton("+字体放大+")
+        self.button1.setFixedSize(200, 30)
+        controls_layout.addWidget(self.button1)
+        self.button1.clicked.connect(lambda: self.update_font_scale('add'))  # 连接按钮点击事件
+
+        # 创建文本框
+        self.text_box = QLineEdit()
+        self.text_box.setReadOnly(True)  # 设置为只读
+        self.text_box.setFixedSize(150, 30)
+        controls_layout.addWidget(self.text_box)
+
+        # 创建第二个按钮
+        self.button2 = QPushButton("-字体缩小-")
+        self.button2.setFixedSize(200, 30)
+        controls_layout.addWidget(self.button2)
+        self.button2.clicked.connect(lambda: self.update_font_scale('subtract'))  # 连接按钮点击事件
+
+        if self.font_scale < 0.78:
+            # 创建关闭程序按钮
+            self.close_button = QPushButton("关闭程序")
+            self.close_button.setFixedSize(100, 30)
+            self.close_button.setStyleSheet("background-color: red; color: white;")  # 设置按钮为红色
+            controls_layout.addWidget(self.close_button)
+            self.close_button.clicked.connect(self.close_application)  # 连接关闭程序的事件
+
+            # 创建最小化按钮
+            self.minimize_button = QPushButton("最小化")
+            self.minimize_button.setFixedSize(100, 30)
+            self.minimize_button.setStyleSheet("background-color: white; color: red;")  # 设置按钮为红色
+            controls_layout.addWidget(self.minimize_button)
+            self.minimize_button.clicked.connect(self.showMinimized)  # 连接最小化事件
+
+            # 创建最大化按钮
+            self.maximize_button = QPushButton("最大化")
+            self.maximize_button.setFixedSize(100, 30)
+            self.maximize_button.setStyleSheet("background-color: white; color: red;")  # 设置按钮为红色
+            controls_layout.addWidget(self.maximize_button)
+            self.maximize_button.clicked.connect(self.showMaximized)  # 连接最大化事件
+
+        # 将控件布局添加到主布局
+        self.grid_layout.addLayout(controls_layout, 12, 0, 1, 12)  # 假设 grid_layout 是 QGridLayout
+
+    def close_application(self):
+        # 关闭程序
+        QApplication.quit()  # 退出应用程序
+
+    def update_font_scale(self, operation):
+        new_value = adjust_font_scale_add(operation)
+        self.update_text_box(new_value)
+
+    def update_text_box(self, value=None):
+        if value is None:
+            import yaml
+            with open('config.yaml', 'r', encoding='utf-8') as file:
+                data = yaml.safe_load(file)
+                value = data.get('font_scale_add', 0)
+        self.text_box.setText(f"当前字体倍数: {value:.2f}")
+        self.refresh_ui()
+
+    def refresh_ui(self):
+        if self.start:
+            file_name = self.save_random_result(False)
+            self.load_random_result(file_name=file_name)
+            if os.path.exists(file_name):
+                os.remove(file_name)  # 删除文件
+        self.start = True
 
     def export_seating_arrangement(self):
         loading_dialog = LoadingDialog()
@@ -496,11 +605,12 @@ class SeatingArrangement(QWidget):
         for row in self.seats:
             for seat in row:
                 seat.setProperty("original_color", seat.palette().color(QPalette.Button).name())  # 保存原始颜色
-                seat.clicked.disconnect()  # 先断开之前的连接
-                seat.clicked.connect(lambda _, s=seat: self.swap_positions.select_seat(s))  # 连接座位点击事件
+                seat.clicked.disconnect()  # 先断开之前的连接 # noqa
+                seat.clicked.connect(lambda _, s=seat: self.swap_positions.select_seat(s))  # 连接座位点击事件 # noqa
 
     def create_color_buttons(self):
         self.color_buttons = QButtonGroup(self)
+        self.color_buttons.setExclusive(True)  # 设置为互斥模式
         self.color_buttons.buttonClicked[int].connect(self.set_selected_color)
 
         # 创建 QLabel 用于显示当前选择的按钮类型
@@ -508,7 +618,9 @@ class SeatingArrangement(QWidget):
         self.selected_color_label.setFont(QFont('Arial', int(14 * self.font_scale)))  # 使用字体倍数
         self.color_buttons_layout.addWidget(self.selected_color_label)  # 将标签添加到布局中
 
+        # 创建按钮并设置为可选中
         self.white_button = QPushButton("空白位置")
+        self.white_button.setCheckable(True)
         self.white_button.setStyleSheet("background-color: white;")
         self.white_button.setFont(QFont('Arial', int(14 * self.font_scale)))  # 使用字体倍数
         self.white_button.setFixedHeight(30)
@@ -516,6 +628,7 @@ class SeatingArrangement(QWidget):
         self.color_buttons_layout.addWidget(self.white_button)
 
         self.lightblue_button = QPushButton("组别一位置")
+        self.lightblue_button.setCheckable(True)
         self.lightblue_button.setStyleSheet("background-color: lightblue;")
         self.lightblue_button.setFont(QFont('Arial', int(14 * self.font_scale)))  # 使用字体倍数
         self.lightblue_button.setFixedHeight(30)
@@ -523,6 +636,7 @@ class SeatingArrangement(QWidget):
         self.color_buttons_layout.addWidget(self.lightblue_button)
 
         self.lightyellow_button = QPushButton("组别二位置")
+        self.lightyellow_button.setCheckable(True)
         self.lightyellow_button.setStyleSheet("background-color: lightyellow;")
         self.lightyellow_button.setFont(QFont('Arial', int(14 * self.font_scale)))  # 使用字体倍数
         self.lightyellow_button.setFixedHeight(30)
@@ -530,6 +644,7 @@ class SeatingArrangement(QWidget):
         self.color_buttons_layout.addWidget(self.lightyellow_button)
 
         self.gray_button = QPushButton("无意义位置")
+        self.gray_button.setCheckable(True)
         self.gray_button.setStyleSheet("background-color: gray;")
         self.gray_button.setFont(QFont('Arial', int(14 * self.font_scale)))  # 使用字体倍数
         self.gray_button.setFixedHeight(30)
@@ -537,18 +652,20 @@ class SeatingArrangement(QWidget):
         self.color_buttons_layout.addWidget(self.gray_button)
 
         self.swap_button = QPushButton("交换位置")
+        self.swap_button.setCheckable(True)
         self.swap_button.setStyleSheet("background-color: yellow;")
         self.swap_button.setFont(QFont('Arial', int(14 * self.font_scale)))  # 使用字体倍数
         self.swap_button.setFixedHeight(30)
-        self.swap_button.clicked.connect(self.enter_swap_mode)  # 连接到进入交换模式的函数
+        self.swap_button.clicked.connect(self.enter_swap_mode)  # 连接到进入交换模式的函数 # noqa
+        self.color_buttons.addButton(self.swap_button, 4)
         self.color_buttons_layout.addWidget(self.swap_button)
 
         # 连接按钮点击事件
-        self.white_button.clicked.connect(self.on_color_button_clicked)
-        self.lightblue_button.clicked.connect(self.on_color_button_clicked)
-        self.lightyellow_button.clicked.connect(self.on_color_button_clicked)
-        self.gray_button.clicked.connect(self.on_color_button_clicked)
-        self.swap_button.clicked.connect(self.swap_button_lable)
+        self.white_button.clicked.connect(self.on_color_button_clicked) # noqa
+        self.lightblue_button.clicked.connect(self.on_color_button_clicked) # noqa
+        self.lightyellow_button.clicked.connect(self.on_color_button_clicked) # noqa
+        self.gray_button.clicked.connect(self.on_color_button_clicked) # noqa
+        self.swap_button.clicked.connect(self.swap_button_lable) # noqa
     def swap_button_lable(self):
         self.selected_color_label.setStyleSheet("color: red;")  # 设置文本颜色为红色
         self.selected_color_label.setText(f"注意：您正处于交换模式中！")
@@ -575,7 +692,7 @@ class SeatingArrangement(QWidget):
         self.randomize_button.setIconSize(QSize(int(32 * self.font_scale), int(32 * self.font_scale)))  # 设置图标大小
         self.randomize_button.setFont(button_font)
         self.randomize_button.setFixedHeight(50)
-        self.randomize_button.clicked.connect(self.randomize_seating)
+        self.randomize_button.clicked.connect(self.randomize_seating) # noqa
         action_buttons_layout.addWidget(self.randomize_button, 0, 0)  # 第一行第一列
 
         # 创建“投影结果到座位表”按钮
@@ -584,7 +701,7 @@ class SeatingArrangement(QWidget):
         self.project_button.setIconSize(QSize(int(32 * self.font_scale), int(32 * self.font_scale)))  # 设置图标大小
         self.project_button.setFont(button_font)
         self.project_button.setFixedHeight(50)
-        self.project_button.clicked.connect(self.project_to_seating)
+        self.project_button.clicked.connect(self.project_to_seating) # noqa
         action_buttons_layout.addWidget(self.project_button, 0, 1)  # 第一行第二列
 
         # 创建“清除投影的结果”按钮
@@ -593,17 +710,8 @@ class SeatingArrangement(QWidget):
         self.clear_projection_button.setIconSize(QSize(int(32 * self.font_scale), int(32 * self.font_scale)))  # 设置图标大小
         self.clear_projection_button.setFont(button_font)
         self.clear_projection_button.setFixedHeight(50)
-        self.clear_projection_button.clicked.connect(self.clear_projection)
+        self.clear_projection_button.clicked.connect(self.clear_projection) # noqa
         action_buttons_layout.addWidget(self.clear_projection_button, 0, 2)  # 第一行第三列
-
-        self.edit_names_button = QPushButton('编辑名字')
-        self.edit_names_button.setIcon(QIcon("./img/edit_name.png"))  # 设置图标
-        self.edit_names_button.setIconSize(
-            QSize(int(32 * self.font_scale), int(32 * self.font_scale)))  # 设置图标大小
-        self.edit_names_button.setFont(button_font)
-        self.edit_names_button.setFixedHeight(50)
-        self.edit_names_button.clicked.connect(self.enter_edit_mode)
-        action_buttons_layout.addWidget(self.edit_names_button, 0, 3)  # 第一行第四列
 
         self.fullscreen_button = QPushButton("全屏展示当前座位表")
         self.fullscreen_button.setStyleSheet("background-color: orange;")
@@ -612,7 +720,7 @@ class SeatingArrangement(QWidget):
             QSize(int(18 * self.font_scale), int(18 * self.font_scale)))  # 设置图标大小
         self.fullscreen_button.setFont(QFont('Arial', int(14 * self.font_scale)))  # 使用字体倍数
         self.fullscreen_button.setFixedHeight(50)
-        self.fullscreen_button.clicked.connect(self.enter_fullscreen_mode)
+        self.fullscreen_button.clicked.connect(self.enter_fullscreen_mode) # noqa
         self.color_buttons.addButton(self.fullscreen_button, 4)
         action_buttons_layout.addWidget(self.fullscreen_button,0,4)
 
@@ -623,7 +731,7 @@ class SeatingArrangement(QWidget):
         self.settings_button.setFont(button_font)
         self.settings_button.setFixedHeight(50)  # 缩小按钮高度
         self.settings_button.setFixedWidth(140)  # 设置按钮宽度
-        self.settings_button.clicked.connect(self.open_settings)  # 连接设置功能
+        self.settings_button.clicked.connect(self.open_settings)  # noqa # 连接设置功能
         action_buttons_layout.addWidget(self.settings_button, 0, 5)  # 第一行第四列
 
         # 创建“保存本次随机结果”按钮
@@ -634,7 +742,7 @@ class SeatingArrangement(QWidget):
         self.save_random_result_button.setFont(button_font)
         self.save_random_result_button.setFixedWidth(140)  # 设置按钮宽度
         self.save_random_result_button.setFixedHeight(50)  # 缩小按钮高度
-        self.save_random_result_button.clicked.connect(self.save_random_result)
+        self.save_random_result_button.clicked.connect(lambda: self.save_random_result(information=True)) # noqa
         action_buttons_layout.addWidget(self.save_random_result_button, 0, 6)  # 第一行第五列
 
         # 创建“加载保存的结果”按钮
@@ -645,7 +753,7 @@ class SeatingArrangement(QWidget):
         self.load_random_result_button.setFont(button_font)
         self.load_random_result_button.setFixedWidth(140)  # 设置按钮宽度
         self.load_random_result_button.setFixedHeight(50)  # 缩小按钮高度
-        self.load_random_result_button.clicked.connect(self.load_random_result)
+        self.load_random_result_button.clicked.connect(self.load_random_result) # noqa
         action_buttons_layout.addWidget(self.load_random_result_button, 0, 7)  # 第二行第一列
 
         # 创建“导出座位表到 Excel”按钮
@@ -655,7 +763,7 @@ class SeatingArrangement(QWidget):
         self.export_button.setFont(button_font)
         self.export_button.setFixedHeight(50)  # 缩小按钮高度
         self.export_button.setFixedWidth(140)  # 设置按钮宽度
-        self.export_button.clicked.connect(self.export_seating_arrangement)  # 连接导出功能
+        self.export_button.clicked.connect(self.export_seating_arrangement)  # 连接导出功能 # noqa
         action_buttons_layout.addWidget(self.export_button, 0, 8)  # 第二行第二列
         # 将按钮布局添加到主布局中
         self.action_buttons_layout.addLayout(action_buttons_layout)  # 只传递布局
@@ -736,7 +844,7 @@ class SeatingArrangement(QWidget):
 
         # 创建定时器，每50毫秒调用一次 assign_next_value
         timer = QTimer()
-        timer.timeout.connect(assign_next_value)
+        timer.timeout.connect(assign_next_value) # noqa
         timer.start(50)  # 每50毫秒调用一次
 
     def project_to_seating(self):
@@ -749,10 +857,16 @@ class SeatingArrangement(QWidget):
                 if seat_color == "#add8e6" and boy_index < len(self.group_first):  # lightblue
                     name, _, label = self.group_first[boy_index]
                     seat.setText(name.split()[0])
+                    font = QFont('Arial', int(14 * self.current_font))  # 设置字体
+                    font.setBold(True)  # 加粗字体
+                    seat.setFont(font)
                     boy_index += 1
                 elif seat_color == "#ffffe0" and girl_index < len(self.group_second):  # lightyellow
                     name, _, label = self.group_second[girl_index]
                     seat.setText(name.split()[0])
+                    font = QFont('Arial', int(14 * self.current_font))  # 设置字体
+                    font.setBold(True)  # 加粗字体
+                    seat.setFont(font)
                     girl_index += 1
         self.check_seating_balance()
 
@@ -793,11 +907,17 @@ class SeatingArrangement(QWidget):
                     seat = self.seats[row][col]
                     seat.setStyleSheet(f"background-color: {color};")
                     seat.setText(text)
+
+                    # 设置字体并加粗
+                    font = QFont('Arial', int(14 * self.current_font))  # 设置字体
+                    font.setBold(True)  # 加粗字体
+                    seat.setFont(font)
+
             self.check_seating_balance()
         except FileNotFoundError:
             pass
 
-    def save_random_result(self):
+    def save_random_result(self, information=True):
         result = {
             'group_first': [(name, random_value) for name, random_value, _ in self.group_first],
             'group_second': [(name, random_value) for name, random_value, _ in self.group_second],
@@ -828,18 +948,30 @@ class SeatingArrangement(QWidget):
 
         with open(filename, 'w') as file:
             json.dump(result, file, indent=4)
-        QMessageBox.information(None,"保存成功",f"配置保存为{filename}。",QMessageBox.Ok )
-    def load_random_result(self):
-        filename, _ = QFileDialog.getOpenFileName(self, "选择要加载的结果文件", "", "JSON Files (*.json)")
-        if not filename:  # 如果用户取消了对话框
-            return
+        if information:
+            QMessageBox.information(None,"保存成功",f"配置保存为{filename}。",QMessageBox.Ok )
+        return filename
+    def get_current_value(self):
+        import yaml
+        with open('config.yaml', 'r', encoding='utf-8') as file:
+            data = yaml.safe_load(file)
+            value = data.get('font_scale_add', 0)
+            return value
+
+    def load_random_result(self, file_name=None):
+        if not file_name:
+            filename, _ = QFileDialog.getOpenFileName(self, "选择要加载的结果文件", "", "JSON Files (*.json)")
+            if not filename:  # 如果用户取消了对话框
+                return
+        else:
+            filename = file_name
         try:
             with open(filename, 'r') as file:
                 result = json.load(file)
-                self.group_first = [(name, random_value, self.create_label(name, random_value)) for name, random_value in
-                             result['group_first']]
-                self.group_second = [(name, random_value, self.create_label(name, random_value)) for name, random_value in
-                              result['group_second']]
+                self.group_first = [(name, random_value, self.create_label(name, random_value)) for name, random_value
+                                    in result['group_first']]
+                self.group_second = [(name, random_value, self.create_label(name, random_value)) for name, random_value
+                                     in result['group_second']]
                 self.update_names_layout()
 
                 for seat_info in result['seating_arrangement']:
@@ -850,7 +982,27 @@ class SeatingArrangement(QWidget):
                     seat = self.seats[row][col]
                     seat.setStyleSheet(f"background-color: {color};")
                     seat.setText(text)
-            self.check_seating_balance()
+
+                    # 设置字体并加粗
+                    now_font = int(14 * (self.font_scale + self.get_current_value()))
+                    font = QFont('Arial', now_font)  # 设置字体
+                    font.setBold(True)  # 加粗字体
+                    seat.setFont(font)
+
+                    # 如果座位文本是数字（序号），也要加粗
+                    if text.isdigit():  # 检查文本是否为数字
+                        seat.setText(f"{text}")  # 确保文本是数字
+                        seat.setFont(font)  # 设置加粗字体
+
+                # 加粗列表中的名字
+                for name, random_value, label in self.group_first:
+                    label.setFont(QFont('Arial', now_font, QFont.Bold))  # 加粗字体
+                for name, random_value, label in self.group_second:
+                    label.setFont(QFont('Arial', now_font, QFont.Bold))  # 加粗字体
+                for name, label in self.ignore:
+                    label.setFont(QFont('Arial', now_font, QFont.Bold))  # 加粗字体
+
+                self.check_seating_balance()
         except FileNotFoundError:
             QMessageBox.warning(self, "Error", f"No saved result found for today ({filename})")
 
@@ -885,16 +1037,16 @@ class SeatingArrangement(QWidget):
             self.warning_label.setFont(QFont('Arial', int(14 * self.font_scale)))
 def load_heavy_modules():
     # 延迟导入
-    global EditMode,get_yaml_value, kill_process, SwapPositions
     from function.edit_mode import EditMode
     from utils.get_yaml_value import get_yaml_value
-    from utils.setting_utils import kill_process
     from function.swap_position import SwapPositions
+    global EditMode, get_yaml_value, kill_process, SwapPositions
 
 if __name__ == '__main__':
 
     time_start = time.time()
     import threading
+    from utils.setting_utils import kill_process
     thread_load = threading.Thread(target=load_heavy_modules)
     thread_load.start()
     thread = threading.Thread(target=kill_process,args=("SeewoAbility.exe",))
@@ -920,6 +1072,8 @@ if __name__ == '__main__':
     small_point = get_yaml_value("small_point")
     ex = SeatingArrangement()
     ex.show()
+    ex.raise_()  # 将窗口提升到最上层
+    ex.activateWindow()  # 激活窗口并将其置于前面
     ex.check_seating_balance()
     ex.check_first_run()
     loading_dialog.close()  # 关闭加载对话框
