@@ -1,5 +1,6 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGroupBox, QPushButton, QMessageBox, QLineEdit
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGroupBox, QPushButton, \
+    QMessageBox, QLineEdit, QDialog
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 from utils.get_font import font_scale
@@ -10,7 +11,9 @@ class SelectableLabel(QLabel):
     def __init__(self, text, parent=None):
         super().__init__(text, parent)
 
-        self.setFont(QFont('Arial', int(16 * font_scale)))
+        font = QFont('Arial', int(16 * font_scale))
+        font.setBold(True)  # 加粗字体
+        self.setFont(font)
         self.setAlignment(Qt.AlignLeft)
         self.setStyleSheet("border: 1px solid black;")
         self.setMargin(5)
@@ -18,17 +21,74 @@ class SelectableLabel(QLabel):
         self.selected = False
         self.setFixedSize(140, 40)
         self.font_scale = font_scale
+
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.selected = not self.selected
             self.update_style()
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.open_edit_dialog()  # 调用打开编辑对话框的方法
+
+    def open_edit_dialog(self):
+        dialog = EditNameDialog(self.text(), self)
+        dialog.exec_()  # 显示对话框并等待用户操作
+
+
+    def edit_name(self):
+        # 创建输入框
+        input_dialog = QLineEdit(self.text())
+        input_dialog.setFixedSize(140, 40)
+        input_dialog.setFont(self.font())
+        input_dialog.setStyleSheet("border: 1px solid black;")
+        input_dialog.setAlignment(Qt.AlignLeft)
+
+        # 显示输入框并处理输入
+        input_dialog.returnPressed.connect(lambda: self.update_name(input_dialog.text()))
+        input_dialog.setFocus()  # 设置焦点到输入框
+        input_dialog.show()
+
+    def update_name(self, new_name):
+        if new_name.strip():  # 确保新名字不为空
+            self.setText(new_name + " [新]")  # 更新标签文本
+            self.selected = False  # 取消选择状态
+            self.update_style()  # 更新样式
 
     def update_style(self):
         if self.selected:
             self.setStyleSheet("border: 1px solid black; background-color: lightblue;")
         else:
             self.setStyleSheet("border: 1px solid black;")
+class EditNameDialog(QDialog):
+    def __init__(self, current_name, label, parent=None):
+        super().__init__(parent)
+        self.label = label
+        self.setWindowTitle("更改名字")  # 设置对话框标题
+        self.setFixedSize(300,300)
 
+        layout = QVBoxLayout()
+        self.input_field = QLineEdit(current_name)
+        self.input_field.setPlaceholderText("输入新名字")
+        layout.addWidget(self.input_field)
+
+        button_layout = QHBoxLayout()
+        self.confirm_button = QPushButton("确定")
+        self.cancel_button = QPushButton("取消")
+
+        button_layout.addWidget(self.confirm_button)
+        button_layout.addWidget(self.cancel_button)
+        layout.addLayout(button_layout)
+
+        self.setLayout(layout)
+
+        self.confirm_button.clicked.connect(self.confirm_change)
+        self.cancel_button.clicked.connect(self.reject)  # 关闭对话框
+
+    def confirm_change(self):
+        new_name = self.input_field.text()
+        self.label.update_name(new_name)  # 更新标签的名字
+        self.accept()  # 关闭对话框并返回接受状态
 class EditMode(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -108,37 +168,6 @@ class EditMode(QWidget):
                 elif child.layout() is not None:
                     self.clear_layout(child.layout())
 
-    def update_names_layout(self):
-        self.clear_layout(self.names_layout)
-
-        group_first_layout = QVBoxLayout()
-        group_second_layout = QVBoxLayout()
-        ignore_layout = QVBoxLayout()
-
-        self.add_names_to_layout(self.group_first, group_first_layout, 6)
-        self.add_names_to_layout(self.group_second, group_second_layout, 6)
-        self.add_names_to_layout(self.ignore, ignore_layout, 6)
-
-        group_first_group = QGroupBox("组别一")
-        group_first_group.setFont(QFont('Arial', int(14 * font_scale)))
-        group_first_group.setLayout(group_first_layout)
-        group_second_group = QGroupBox("组别二")
-        group_second_group.setFont(QFont('Arial', int(14 * font_scale)))
-        group_second_group.setLayout(group_second_layout)
-        ignore_group = QGroupBox("忽略")
-        ignore_group.setFont(QFont('Arial', int(14 * font_scale)))
-        ignore_group.setLayout(ignore_layout)
-
-        self.names_layout.addWidget(group_first_group)
-        self.names_layout.addWidget(group_second_group)
-        self.names_layout.addSpacing(20)
-        self.names_layout.addWidget(ignore_group)
-
-        # 添加输入框用于添加新学生
-        self.add_input_field(group_first_layout, 'group_first')
-        self.add_input_field(group_second_layout, 'group_second')
-        self.add_input_field(ignore_layout, 'ignore')
-
     def add_input_field(self, layout, category):
         input_field = QLineEdit()
         if category == "group_first":
@@ -155,7 +184,7 @@ class EditMode(QWidget):
 
     def add_student(self, name, category):
         if name.strip():
-            label = SelectableLabel(f"{name} [选择]")
+            label = SelectableLabel(f"{name} [新]")
             if category == 'group_first':
                 self.group_first.append((name, 0.0, label))
             elif category == 'group_second':
@@ -238,26 +267,47 @@ class EditMode(QWidget):
         self.update_names_layout()  # 刷新列表
 
     def move_selected_to(self, category):
-        selected_labels = [label for label in self.findChildren(SelectableLabel, options=Qt.FindChildrenRecursively) if label.selected]
+        selected_labels = [label for label in self.findChildren(SelectableLabel, options=Qt.FindChildrenRecursively) if
+                           label.selected]
         if not selected_labels:
             QMessageBox.warning(self, "警告", "请先选择一个名字")
             return
 
         for label in selected_labels:
-            text = label.text().split()[0]
+            text = label.text().split()[0]  # 获取名字部分
+            # 检查当前标签所在的组别
+            current_group = None
+            if label in [entry[2] for entry in self.group_first]:
+                current_group = 'group_first'
+            elif label in [entry[2] for entry in self.group_second]:
+                current_group = 'group_second'
+            elif label in [entry[1] for entry in self.ignore]:
+                current_group = 'ignore'
+
+            # 检查是否尝试将标签移动到其当前组别
+            if current_group == category:
+                QMessageBox.warning(self, "警告", f"不能将名字移动到当前组别: {category}")
+                continue  # 跳过此标签的移动
+            # 从原组别中删除该名字
+            self.remove_from_other_categories(text, category)
+
+            # 根据选择的目标组别将名字移动到新组别
             if category == 'group_first':
                 self.group_first.append((text, 0.000, label))
-                self.remove_from_other_categories(text, 'group_first')
             elif category == 'group_second':
                 self.group_second.append((text, 0.000, label))
-                self.remove_from_other_categories(text, 'group_second')
             elif category == 'ignore':
                 self.ignore.append((text, label))
-                self.remove_from_other_categories(text, 'ignore')
+
+            # 从当前布局中移除标签
             label.setParent(None)
-            label.selected = False
-            label.update_style()
-        self.update_names_layout()
+            label.selected = False  # 取消选中状态
+            label.update_style()  # 更新样式
+
+            # 将标签重新添加到目标组别布局中
+            self.update_names_layout()
+
+        self.update_names_layout()  # 刷新布局
 
     def remove_from_other_categories(self, name, category):
         if category != 'group_first':
@@ -266,6 +316,41 @@ class EditMode(QWidget):
             self.group_second = [item for item in self.group_second if item[0] != name]
         if category != 'ignore':
             self.ignore = [item for item in self.ignore if item[0] != name]
+
+    def update_names_layout(self):
+        self.clear_layout(self.names_layout)
+
+        group_first_layout = QVBoxLayout()
+        group_second_layout = QVBoxLayout()
+        ignore_layout = QVBoxLayout()
+
+        self.add_names_to_layout(self.group_first, group_first_layout, 6)
+        self.add_names_to_layout(self.group_second, group_second_layout, 6)
+        self.add_names_to_layout(self.ignore, ignore_layout, 6)
+
+        group_first_group = QGroupBox("组别一")
+        font = QFont('Arial', int(14 * font_scale))
+        font.setBold(True)  # 加粗字体
+        group_first_group.setFont(font)
+        group_first_group.setLayout(group_first_layout)
+
+        group_second_group = QGroupBox("组别二")
+        group_second_group.setFont(font)
+        group_second_group.setLayout(group_second_layout)
+
+        ignore_group = QGroupBox("忽略")
+        ignore_group.setFont(font)
+        ignore_group.setLayout(ignore_layout)
+
+        self.names_layout.addWidget(group_first_group)
+        self.names_layout.addWidget(group_second_group)
+        self.names_layout.addSpacing(20)
+        self.names_layout.addWidget(ignore_group)
+
+        # 添加输入框用于添加新学生
+        self.add_input_field(group_first_layout, 'group_first')
+        self.add_input_field(group_second_layout, 'group_second')
+        self.add_input_field(ignore_layout, 'ignore')
 
     def save_and_exit_edit_mode(self):
         self.save_names_to_file()
@@ -291,16 +376,29 @@ class EditMode(QWidget):
     def save_names_to_file(self):
         with open('./students.txt', 'w', encoding='utf-8') as file:
             file.write('[group_first]\n')
-            for name, _, _ in self.group_first:
-                file.write(f"{name}\n")
+            for entry in self.group_first:
+                label = entry[2]
+                current_name = label.text().replace(" [新]", "").strip()
+                file.write(f"{current_name}\n")
             file.write('[group_second]\n')
-            for name, _, _ in self.group_second:
-                file.write(f"{name}\n")
+            for entry in self.group_second:
+                label = entry[2]
+                current_name = label.text().replace(" [新]", "").strip()
+                file.write(f"{current_name}\n")
             file.write('[ignore]\n')
-            for name, _ in self.ignore:
-                file.write(f"{name}\n")
+            for entry in self.ignore:
+                label = entry[1]
+                current_name = label.text().replace(" [新]", "").strip()
+                file.write(f"{current_name}\n")
 
 if __name__ == '__main__':
+    import os
+    # 获取当前文件的目录
+    current_directory = os.path.dirname(os.path.abspath(__file__))
+
+    # 设置工作目录为上级目录
+    parent_directory = os.path.dirname(current_directory)
+    os.chdir(parent_directory)
     app = QApplication(sys.argv)
     ex = EditMode()
     ex.show()
