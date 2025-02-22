@@ -146,7 +146,7 @@ class SettingsWindow(QWidget):
         layout.addWidget(self.web_text)
 
         # 添加退出设置按钮
-        layout.addSpacing(50)
+        layout.addSpacing(0)
         exit_button = QPushButton("退出设置")
         exit_button.setFont(QFont('Arial', int(24 * self.font_scale)))
         exit_button.clicked.connect(self.exit_settings)
