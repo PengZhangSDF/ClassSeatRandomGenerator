@@ -65,16 +65,25 @@ class EditNameDialog(QDialog):
         super().__init__(parent)
         self.label = label
         self.setWindowTitle("更改名字")  # 设置对话框标题
-        self.setFixedSize(300,300)
+        self.setFixedSize(400, 200)  # 可以根据需要调整对话框的大小
 
         layout = QVBoxLayout()
+
+        # 创建输入框并设置字体和大小
         self.input_field = QLineEdit(current_name)
         self.input_field.setPlaceholderText("输入新名字")
+        font = QFont('Arial', int(16 * font_scale))  # 设置字体和大小
+        self.input_field.setFont(font)
+        self.input_field.setFixedSize(300, 50)  # 设置输入框的固定大小（宽300，高50）
         layout.addWidget(self.input_field)
 
         button_layout = QHBoxLayout()
         self.confirm_button = QPushButton("确定")
         self.cancel_button = QPushButton("取消")
+
+        # 设置按钮的字体和大小
+        self.confirm_button.setFont(font)
+        self.cancel_button.setFont(font)
 
         button_layout.addWidget(self.confirm_button)
         button_layout.addWidget(self.cancel_button)
