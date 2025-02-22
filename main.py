@@ -35,7 +35,6 @@ class ImageViewer(QWidget):
         self.next_button.clicked.connect(self.show_next_image) # noqa
 
         self.show_image()
-
     def show_image(self):
         if 0 <= self.current_index < len(self.images):
             pixmap = QPixmap(self.images[self.current_index])
@@ -58,6 +57,7 @@ class ImageViewer(QWidget):
 class SeatingArrangement(QWidget):
     def __init__(self):
         super().__init__()
+        self.randomization_window = None  # 用于存储随机过程窗口
         self.edit_mode_window = None
         self.selected_color = None  # 初始化 selected_color 属性
         self.saved_seating_arrangement = None  # 保存当前座位表状态
@@ -65,10 +65,13 @@ class SeatingArrangement(QWidget):
         self.current_font = (self.font_scale + self.get_current_value()) # 当前字体大小
         self.is_in_swap_mode = False  # 添加状态标志
         self.start = False
+        self.first_random = True
 
         self.small_point = small_point
         self.auto_project = auto_project
         self.regulatory_taskkill = regulatory_taskkill
+        self.randomization_window_show = randomization_window_show
+        self.current_random_speed = current_random_speed
         self.initUI()
         # # 设置窗口始终在最上面
         # self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
@@ -78,7 +81,8 @@ class SeatingArrangement(QWidget):
         # 在窗口显示时调整大小到最小可缩小的尺寸
         self.adjustSize()  # 调整窗口大小
         super().showEvent(event)  # 调用父类的 showEvent
-
+    def regularly_get(self):
+            self.current_font = (self.font_scale + self.get_current_value())
     def initUI(self):
 
         self.setWindowTitle('随机座位生成器')
@@ -126,6 +130,7 @@ class SeatingArrangement(QWidget):
         self.load_names()
         self.load_seating_arrangement()
         self.update_text_box()
+
     def check_and_update_students_file(self):
         filename = 'students.txt'
 
@@ -316,6 +321,8 @@ class SeatingArrangement(QWidget):
             self.auto_project = get_yaml_value("auto_project")
             self.regulatory_taskkill = get_yaml_value("regulatory_taskkill")
             self.small_point = get_yaml_value("small_point")
+            self.randomization_window_show = get_yaml_value("randomization_window_show")
+            self.current_random_speed = get_yaml_value("current_random_speed")
             os.remove('temp_seating_arrangement.json')  # 删除临时文件
         except:
             os.remove('temp_seating_arrangement.json')  # 删除临时文件
@@ -507,7 +514,7 @@ class SeatingArrangement(QWidget):
     def update_font_scale(self, operation):
         new_value = adjust_font_scale_add(operation)
         self.update_text_box(new_value)
-
+        self.regularly_get()
     def update_text_box(self, value=None):
         if value is None:
             import yaml
@@ -516,6 +523,7 @@ class SeatingArrangement(QWidget):
                 value = data.get('font_scale_add', 0)
         self.text_box.setText(f"当前字体倍数: {value:.2f}")
         self.refresh_ui()
+
 
     def refresh_ui(self):
         if self.start:
@@ -813,39 +821,131 @@ class SeatingArrangement(QWidget):
                     seat.setText("")
 
     def randomize_seating(self):
+        # 禁用所有按钮
+        self.set_buttons_enabled(False)
+        add = 17
+        # 获取右侧座位表的位置和大小
+        seat_table_geometry = self.grid_layout.geometry()  # 获取座位表的几何信息
+        global_position = self.mapToGlobal(seat_table_geometry.topLeft())  # 转换为全局坐标
+
+        # 计算右侧座位表的几何信息
+        right_seat_table_geometry = QRect(global_position.x() + self.names_container.width() + add,
+                                          global_position.y(),
+                                          seat_table_geometry.width(),
+                                          seat_table_geometry.height())
+        self.first_random = False
+
+        # 创建随机过程窗口，设置为覆盖右侧座位表
+        if self.randomization_window_show:
+            self.randomization_window = RandomizationWindow(self, right_seat_table_geometry,
+                                                            self.current_font, self.small_point)  # 使用 QRect 设置窗口位置和大小
+            self.randomization_window.show()  # 显示窗口
+
         all_students = self.group_first + self.group_second
         current_index = 0
+
+        # 初始化学生信息列表，并将所有随机值设置为0
+        student_info = [(name, 0) for name, _, _ in all_students]  # 初始随机值为0
+
+        # 刷新界面标签，确保显示为0
+        for i, (name, _) in enumerate(student_info):
+            label = all_students[i][2]  # 获取原界面标签
+            label.setText(f"{name} {0:.{self.small_point}f}")  # 更新原界面标签文本为0
+
+        # 监测更新的计时器
+        last_update_time = QTime.currentTime()  # 记录上次更新的时间
 
         def assign_next_value():
             nonlocal current_index
             if current_index < len(all_students):
-                name, _, label = all_students[current_index]
-                random_value = round(random.uniform(0, 1), self.small_point)  # 生成随机数，保留小数
-                all_students[current_index] = (name, random_value, label)  # 赋值
-                label.setText(f"{name} {random_value}")  # 更新标签文本
+                try:
+                    name, _, label = all_students[current_index]
+                    random_value = round(random.uniform(0, 1), self.small_point)  # 生成随机数，保留小数
+                    student_info[current_index] = (name, random_value)  # 更新学生信息
+                    label.setText(f"{name} {random_value:.{self.small_point}f}")  # 更新原界面标签文本
 
-                current_index += 1
+                    # 更新随机窗口显示
+                    if self.randomization_window_show:
+                        try:
+                            # 这里确保传递的是最新的 group_first 和 group_second
+                            self.randomization_window.update_display(student_info[:len(self.group_first)],
+                                                                     student_info[len(self.group_first):],
+                                                                     current_index)
+                        except Exception as e:
+                            print(f"Error during update_display: {e}")
+
+                        # 实时更新随机窗口的位置
+                        right_seat_table_geometry.moveTopLeft(
+                            self.mapToGlobal(seat_table_geometry.topLeft()) + QPoint(self.names_container.width() + add,
+                                                                                     0))
+                        self.randomization_window.setGeometry(right_seat_table_geometry)  # 更新窗口位置
+
+                        # 实时更新窗口透明度
+                        if 1 < current_index < 11 and self.randomization_window.windowOpacity() < 0.9:
+                            new_opacity = min(1, self.randomization_window.windowOpacity() + 0.1)  # 增加透明度
+                        elif current_index == 1:
+                            new_opacity = 0
+                        elif current_index > len(self.group_first) + len(self.group_second) - 10:
+                            new_opacity = max(0, self.randomization_window.windowOpacity() - 0.1)  # 减小透明度
+                        else:
+                            new_opacity = 1
+                        self.randomization_window.setWindowOpacity(new_opacity)  # 设置新的透明度
+
+                    current_index += 1
+                    self.last_update_time = QTime.currentTime()  # 更新最后一次更新时间
+                except Exception as e:
+                    print(f"Error during assignment: {e}")
+                    current_index += 1  # 跳过当前索引，继续下一次循环
+
             else:
                 # 所有学生都已赋值，停止定时器
                 timer.stop()
+                if self.randomization_window_show:
+                    self.randomization_window.close()  # 关闭随机过程窗口
 
                 # 将赋值结果写回到各自的类别
-                self.group_first = all_students[:len(self.group_first)]
-                self.group_second = all_students[len(self.group_first):]
+                self.group_first = student_info[:len(self.group_first)]
+                self.group_second = student_info[len(self.group_first):]
 
                 # 对男生和女生类别分别进行排序
                 for category in [self.group_first, self.group_second]:
-                    category.sort(key=lambda x: x[1])
+                    category.sort(key=lambda x: x[1])  # 按随机值排序
+
+                # 更新主界面上的标签
+                try:
+                    for i, (name, random_value) in enumerate(self.group_first):
+                        self.group_first[i] = (name, random_value, self.create_label(name, random_value))
+                    for i, (name, random_value) in enumerate(self.group_second):
+                        self.group_second[i] = (name, random_value, self.create_label(name, random_value))
+                except Exception as e:
+                    print(f"随机过程指针越界: {e}")
 
                 # 更新布局
                 self.update_names_layout()
                 if self.auto_project:
                     self.project_to_seating()
+                self.set_buttons_enabled(True)
 
-        # 创建定时器，每50毫秒调用一次 assign_next_value
+        # 创建定时器，每60毫秒调用一次 assign_next_value
         timer = QTimer()
-        timer.timeout.connect(assign_next_value) # noqa
-        timer.start(50)  # 每50毫秒调用一次
+        timer.timeout.connect(assign_next_value)  # 连接定时器到函数
+        timer.start(self.current_random_speed)  # 每60毫秒调用一次
+
+        # 创建监测更新的定时器
+        monitor_timer = QTimer()
+        monitor_timer.timeout.connect(lambda: check_for_update(self.last_update_time))
+        monitor_timer.start(200)  # 每300毫秒检查一次
+
+        def check_for_update(last_update_time):
+            if last_update_time.msecsTo(QTime.currentTime()) > self.current_random_speed + 200:
+                # 如果超过设定的时间没有更新，立即进行下一次更新
+                assign_next_value()
+                print("Error:进行下一次更新")
+    def set_buttons_enabled(self, enabled):
+        """启用或禁用所有按钮"""
+        # 禁用/启用所有按钮
+        for button in self.findChildren(QPushButton):
+            button.setEnabled(enabled)
 
     def project_to_seating(self):
         boy_index = 0
@@ -1056,10 +1156,10 @@ if __name__ == '__main__':
     loading_dialog = LoadingDialog()
     thread_load.join()
     loading_dialog.show()
-
+    from function.random_large import RandomizationWindow
     from PyQt5.QtWidgets import QHBoxLayout, QPushButton,QGridLayout, \
         QButtonGroup, QFileDialog, QGroupBox, QMessageBox
-    from PyQt5.QtCore import Qt, QTimer, QSize
+    from PyQt5.QtCore import Qt, QTimer, QSize, QRect, QPoint, QTime
     from PyQt5.QtGui import QFont, QPalette, QPixmap, QIcon
     import sys
     import random
@@ -1070,6 +1170,8 @@ if __name__ == '__main__':
     auto_project = get_yaml_value("auto_project")
     regulatory_taskkill = get_yaml_value("regulatory_taskkill")
     small_point = get_yaml_value("small_point")
+    current_random_speed = get_yaml_value("current_random_speed")
+    randomization_window_show = get_yaml_value("randomization_window_show")
     ex = SeatingArrangement()
     ex.show()
     ex.raise_()  # 将窗口提升到最上层
@@ -1080,3 +1182,4 @@ if __name__ == '__main__':
     time_end = time.time()
     print(time_end - time_start)
     sys.exit(app.exec_())
+
