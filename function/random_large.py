@@ -17,6 +17,7 @@ class RandomizationWindow(QDialog):
         self.setLayout(self.layout)
         self.font_scale = current_font
         self.small_point = small_point
+
     def update_display(self, group_first, group_second, current_index):
         """更新显示的座位信息"""
         # 清空之前的内容
@@ -34,16 +35,18 @@ class RandomizationWindow(QDialog):
             if current_index < len(group_first):
                 displayed_students = group_first
                 max_rows_current = max_rows_group1
+                current_student_index = current_index  # 当前学生在第一组中的索引
             else:
                 displayed_students = group_second
                 max_rows_current = max_rows_group2
+                current_student_index = current_index - len(group_first)  # 当前学生在第二组中的索引
 
             # 更新显示
             for i in range(len(displayed_students)):
                 name, random_value = displayed_students[i]
 
                 # 创建标签并设置字体
-                if i == current_index % len(displayed_students):  # 当前学生
+                if i == current_student_index:  # 当前学生
                     label = QLabel(
                         f"{name} <span style='background-color: blue; color: white;'>{random_value:.{self.small_point}f}</span>")
                 else:  # 其他学生
