@@ -857,14 +857,10 @@ class SeatingArrangement(QWidget):
             nonlocal current_index
             if current_index < len(all_students):
                 try:
-                    print("开始了")
                     name, _, label = all_students[current_index]
                     random_value = round(random.uniform(0, 1), self.small_point)  # 生成随机数，保留小数
-                    print("生成随机数字完成")
                     student_info[current_index] = (name, random_value)  # 更新学生信息
-                    print("完成更新学生信息")
                     label.setText(f"{name} {random_value:.{self.small_point}f}")  # 更新原界面标签文本
-                    print("更新标签完成")
 
                     # 更新随机窗口显示
                     if self.randomization_window_show:
@@ -892,12 +888,10 @@ class SeatingArrangement(QWidget):
                         else:
                             new_opacity = 1
                         self.randomization_window.setWindowOpacity(new_opacity)  # 设置新的透明度
-                        print("更新界面完成")
 
                     current_index += 1
                     # 使用 QTimer.singleShot 来设置下一个调用
                     QTimer.singleShot(max(self.current_random_speed, 10), assign_next_value)  # 设定下次调用的时间
-                    print("循环完成")
                 except Exception as e:
                     print(f"Error during assignment: {e}")
                     current_index += 1  # 跳过当前索引，继续下一次循环
