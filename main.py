@@ -65,7 +65,8 @@ class SeatingArrangement(QWidget):
         self.current_font = (self.font_scale + self.get_current_value()) # 当前字体大小
         self.is_in_swap_mode = False  # 添加状态标志
         self.start = False
-        self.first_random = True
+        self.random = True
+        self.random_time = 0
 
         self.small_point = small_point
         self.auto_project = auto_project
@@ -852,17 +853,18 @@ class SeatingArrangement(QWidget):
             label = all_students[i][2]  # 获取原界面标签
             label.setText(f"{name} {0:.{self.small_point}f}")  # 更新原界面标签文本为0
 
-        # 监测更新的计时器
-        last_update_time = QTime.currentTime()  # 记录上次更新的时间
-
         def assign_next_value():
             nonlocal current_index
             if current_index < len(all_students):
                 try:
+                    print("开始了")
                     name, _, label = all_students[current_index]
                     random_value = round(random.uniform(0, 1), self.small_point)  # 生成随机数，保留小数
+                    print("生成随机数字完成")
                     student_info[current_index] = (name, random_value)  # 更新学生信息
+                    print("完成更新学生信息")
                     label.setText(f"{name} {random_value:.{self.small_point}f}")  # 更新原界面标签文本
+                    print("更新标签完成")
 
                     # 更新随机窗口显示
                     if self.randomization_window_show:
@@ -890,16 +892,21 @@ class SeatingArrangement(QWidget):
                         else:
                             new_opacity = 1
                         self.randomization_window.setWindowOpacity(new_opacity)  # 设置新的透明度
+                        print("更新界面完成")
 
                     current_index += 1
-                    self.last_update_time = QTime.currentTime()  # 更新最后一次更新时间
+                    # 使用 QTimer.singleShot 来设置下一个调用
+                    QTimer.singleShot(max(self.current_random_speed, 10), assign_next_value)  # 设定下次调用的时间
+                    print("循环完成")
                 except Exception as e:
                     print(f"Error during assignment: {e}")
                     current_index += 1  # 跳过当前索引，继续下一次循环
+                    # 继续调用下一个
+                    QTimer.singleShot(max(self.current_random_speed, 10), assign_next_value)
 
             else:
-                # 所有学生都已赋值，停止定时器
-                timer.stop()
+                # 所有学生都已赋值，停止计时器
+                print("完成停止计时器")
                 if self.randomization_window_show:
                     self.randomization_window.close()  # 关闭随机过程窗口
 
@@ -926,21 +933,22 @@ class SeatingArrangement(QWidget):
                     self.project_to_seating()
                 self.set_buttons_enabled(True)
 
-        # 创建定时器，每60毫秒调用一次 assign_next_value
-        timer = QTimer()
-        timer.timeout.connect(assign_next_value)  # 连接定时器到函数
-        timer.start(self.current_random_speed)  # 每60毫秒调用一次
+        # 启动第一次调用
+        assign_next_value()
 
-        # 创建监测更新的定时器
-        monitor_timer = QTimer()
-        monitor_timer.timeout.connect(lambda: check_for_update(self.last_update_time))
-        monitor_timer.start(200)  # 每300毫秒检查一次
+    # def start_timer(self):
+    #     self.timer = QTimer()
+    #     self.timer.setSingleShot(True)  # 设为单次触发
+    #     self.timer.timeout.connect(self.safe_assign)
+    #     self.timer.start(self.current_random_speed)
+    #
+    # def safe_assign(self):
+    #     try:
+    #         self.assign_next_value()
+    #     finally:
+    #         # 处理完成后重新启动
+    #         self.timer.start(self.current_random_speed)
 
-        def check_for_update(last_update_time):
-            if last_update_time.msecsTo(QTime.currentTime()) > self.current_random_speed + 200:
-                # 如果超过设定的时间没有更新，立即进行下一次更新
-                assign_next_value()
-                print("Error:进行下一次更新")
     def set_buttons_enabled(self, enabled):
         """启用或禁用所有按钮"""
         # 禁用/启用所有按钮
